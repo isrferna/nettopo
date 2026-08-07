@@ -1,0 +1,30 @@
+-------------------------
+Device ID: sw2-dist.example.com
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco WS-C9300-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/24,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.2
+
+-------------------------
+Device ID: core-rtr.example.com
+Entry address(es):
+  IP address: 10.0.0.254
+Platform: cisco ISR4331/K9,  Capabilities: Router
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet0/0/0
+Holdtime : 158 sec
+
+Version :
+Cisco IOS XE Software, Version 17.03.05
+
+advertisement version: 2
+
+Total cdp entries displayed : 2

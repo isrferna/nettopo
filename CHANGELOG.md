@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Phase 2 L2 parsing + CSV: `ingest/base.py` (`DataSource` interface) and
+  `ingest/files.py` (`FileDataSource`, reads `utf-8-sig`, identifies source devices via
+  their prompt line); parsers for `show version`, `show cdp neighbors detail`,
+  `show lldp neighbors detail`, `show ip interface brief`/`show interfaces`, and
+  `show vlan brief` via ntc-templates; `ingest/model_builder.py` wiring ingestion and
+  parsing into a populated `NetworkModel`, including CDP/LLDP FQDN-vs-short-hostname
+  neighbor correlation and cross-discovery link de-duplication; `export/csv_export.py`
+  writing `devices.csv`, `interfaces.csv`, `neighbors.csv`, `vlans.csv` (plus
+  header-only `stp.csv`/`hsrp.csv`/`bgp.csv` pending Phases 4-6). `nettopo parse -i
+  <dir>` is now a real command. Security: `utils/paths.py` (filename sanitization and
+  output-root resolution against path traversal) and CSV formula-injection escaping;
+  `tests/test_no_network.py` proves the full `parse` run opens no sockets.
 - Phase 1 foundations: the interface-name normalizer (`utils/interfaces.py`,
   PROJECT_SPEC.md section 5), the normalized data model dataclasses and enums
   (`model/entities.py`, section 6), and the STP/HSRP grouping fingerprint functions

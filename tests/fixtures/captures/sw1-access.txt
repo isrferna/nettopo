@@ -1,0 +1,116 @@
+sw1-access#show version
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2020 by Cisco Systems, Inc.
+Compiled Thu 06-Aug-20 03:20 by prod_rel_team
+
+ROM: Bootstrap program is C2960X boot loader
+BOOTLDR: C2960X Boot Loader (C2960X-HBOOT-M) Version 15.2(7r)E1, RELEASE SOFTWARE (fc1)
+
+sw1-access uptime is 3 weeks, 2 days, 4 hours, 20 minutes
+System returned to ROM by power-on
+System image file is "flash:/c2960x-universalk9-mz.152-7.E3/c2960x-universalk9-mz.152-7.E3.bin"
+
+
+cisco WS-C2960X-24TS-L (PowerPC405) processor (revision R0) with 524288K bytes of memory.
+Processor board ID FOC2134X0ABC
+Last reset from power-on
+1 Virtual Ethernet interface
+28 Gigabit Ethernet interfaces
+The password-recovery mechanism is enabled.
+
+64K bytes of flash-simulated non-volatile configuration memory.
+Base ethernet MAC Address       : 00:1A:2B:3C:4D:01
+Configuration register is 0xF
+
+sw1-access#show cdp neighbors detail
+-------------------------
+Device ID: sw2-dist.example.com
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco WS-C9300-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/24,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.2
+
+-------------------------
+Device ID: core-rtr.example.com
+Entry address(es):
+  IP address: 10.0.0.254
+Platform: cisco ISR4331/K9,  Capabilities: Router
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet0/0/0
+Holdtime : 158 sec
+
+Version :
+Cisco IOS XE Software, Version 17.03.05
+
+advertisement version: 2
+
+Total cdp entries displayed : 2
+
+sw1-access#show lldp neighbors detail
+Local Intf: Gi1/0/24
+Chassis id: 001a.2b3c.4d02
+Port id: Gi1/0/1
+Port Description: GigabitEthernet1/0/1
+System Name: sw2-dist.example.com
+
+System Description:
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+Time remaining: 112 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Addresses:
+    IP: 10.0.0.2
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 1
+
+sw1-access#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+Vlan10                 10.10.10.1      YES manual up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+GigabitEthernet1/0/24  unassigned      YES unset  up                    up
+
+sw1-access#show interfaces
+GigabitEthernet1/0/1 is up, line protocol is up (connected)
+  Hardware is Gigabit Ethernet, address is 001a.2b3c.4d10 (bia 001a.2b3c.4d10)
+  Description: Uplink to core-rtr
+  Internet address is 10.10.10.1/24
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX
+  input flow-control is off, output flow-control is unsupported
+
+GigabitEthernet1/0/24 is up, line protocol is up (connected)
+  Hardware is Gigabit Ethernet, address is 001a.2b3c.4d24 (bia 001a.2b3c.4d24)
+  Description: Uplink to sw2-dist
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX
+  input flow-control is off, output flow-control is unsupported
+
+sw1-access#show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active
+10   users                            active
+99   mgmt                             active

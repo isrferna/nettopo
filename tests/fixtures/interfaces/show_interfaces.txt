@@ -1,0 +1,27 @@
+GigabitEthernet1/0/1 is up, line protocol is up (connected)
+  Hardware is Gigabit Ethernet, address is 001a.2b3c.4d10 (bia 001a.2b3c.4d10)
+  Description: Uplink to core-rtr
+  Internet address is 10.10.10.1/24
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX
+  input flow-control is off, output flow-control is unsupported
+
+GigabitEthernet1/0/24 is up, line protocol is up (connected)
+  Hardware is Gigabit Ethernet, address is 001a.2b3c.4d24 (bia 001a.2b3c.4d24)
+  Description: Uplink to sw2-dist
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX
+  input flow-control is off, output flow-control is unsupported
+
+Vlan10 is up, line protocol is up
+  Hardware is EtherSVI, address is 001a.2b3c.4d99 (bia 001a.2b3c.4d99)
+  Internet address is 10.10.10.1/24
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set

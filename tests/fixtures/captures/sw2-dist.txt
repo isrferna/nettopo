@@ -1,0 +1,94 @@
+sw2-dist#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+Compiled Tue 11-Jul-23 05:00 by mcpre
+
+ROM: IOS-XE ROMMON
+
+sw2-dist uptime is 5 weeks, 1 day, 2 hours, 10 minutes
+Uptime for this control processor is 5 weeks, 1 day, 2 hours, 12 minutes
+System returned to ROM by Reload Command
+System restarted at 08:12:45 UTC Thu Aug 1 2024
+System image file is "flash:packages.conf"
+
+
+cisco C9300-24P (X86) processor with 1367424K/6147K bytes of memory.
+Processor board ID FOC2540X0YZ
+2 Virtual Ethernet interfaces
+28 Gigabit Ethernet interfaces
+2 Ten Gigabit Ethernet interfaces
+2147483647K bytes of physical memory.
+Configuration register is 0x102
+
+sw2-dist#show cdp neighbors detail
+-------------------------
+Device ID: sw1-access.example.com
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: cisco WS-C2960X-24TS-L,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/24
+Holdtime : 152 sec
+
+Version :
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3, RELEASE SOFTWARE (fc2)
+
+advertisement version: 2
+
+Total cdp entries displayed : 1
+
+sw2-dist#show lldp neighbors detail
+Local Intf: Gi1/0/1
+Chassis id: 001a.2b3c.4d01
+Port id: Gi1/0/24
+Port Description: GigabitEthernet1/0/24
+System Name: sw1-access.example.com
+
+System Description:
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3
+
+Time remaining: 108 seconds
+System Capabilities: B
+Enabled Capabilities: B
+Management Addresses:
+    IP: 10.0.0.1
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 1
+
+sw2-dist#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+Vlan10                 10.10.10.2      YES manual up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+TenGigabitEthernet1/1/1 unassigned     YES unset  administratively down down
+
+sw2-dist#show interfaces
+GigabitEthernet1/0/1 is up, line protocol is up (connected)
+  Hardware is Gigabit Ethernet, address is 001a.2b3c.4d02 (bia 001a.2b3c.4d02)
+  Description: Uplink to sw1-access
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+  Keepalive set (10 sec)
+  Full-duplex, 1000Mb/s, media type is 10/100/1000BaseTX
+  input flow-control is off, output flow-control is unsupported
+
+TenGigabitEthernet1/1/1 is administratively down, line protocol is down (disabled)
+  Hardware is Ten Gigabit Ethernet, address is 001a.2b3c.4d03 (bia 001a.2b3c.4d03)
+  Description: Unused uplink
+  MTU 1500 bytes, BW 10000000 Kbit/sec, DLY 10 usec,
+     reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, loopback not set
+
+sw2-dist#show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active
+10   users                            active
