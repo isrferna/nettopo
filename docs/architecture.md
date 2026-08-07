@@ -5,12 +5,15 @@ behind them. It is kept in sync with the code — see the documentation-maintena
 in [`CLAUDE.md`](../CLAUDE.md). For scope, the full data model, and the CLI reference,
 see [`PROJECT_SPEC.md`](../PROJECT_SPEC.md).
 
-## Current state (Phase 0)
+## Current state (Phase 1)
 
-Only the repository layout and the CLI skeleton exist. `nettopo <command> -i <dir>`
-parses its arguments successfully and reports "not implemented yet" — no ingestion,
-parsing, modeling, view, or rendering logic has been written. The sections below
-describe the target architecture that later phases build out incrementally.
+The repository layout, the CLI skeleton, and the Phase 1 foundations exist:
+`utils/interfaces.py` (interface-name normalizer), `model/entities.py` (data model
+dataclasses and enums), and `model/grouping.py` (STP/HSRP grouping fingerprints).
+`nettopo <command> -i <dir>` still parses its arguments and reports "not implemented
+yet" — no ingestion, parsing, view, or rendering logic has been written; nothing is
+user-visible yet. The sections below describe the target architecture that later
+phases build out incrementally.
 
 ## Components
 
