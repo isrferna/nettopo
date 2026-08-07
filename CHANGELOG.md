@@ -7,8 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-07
+
+First usable PyPI release.
+
 ### Added
 
+- Phase 3 L2 view: `views/l2.py` builds a render-ready `Diagram`
+  (`views/diagram.py`) from the model, honoring `--endpoints all|network-only`
+  (network-only keeps a device if `is_source` is true or a neighbor's CDP/LLDP
+  reported it with Router/Switch capabilities) and attaching interface labels to
+  both ends of every link. Links whose local interface is a port-channel member are
+  grouped into one rendered link per port-channel (MLAG), though no shipped parser
+  populates `Interface.po_id` yet, so this is currently a no-op against real captures
+  — see `docs/architecture.md`.
+- `render/drawio.py` (the only module importing N2G), `render/icons.py`
+  (`DeviceRole` -> real `mxgraph.cisco.*` draw.io stencil shapes, verified against
+  jgraph/drawio's `Sidebar-Cisco.js`), and `render/lucidify.py` (collapses N2G's
+  per-end `src_label`/`trgt_label` child cells, which Lucidchart's importer mangles,
+  into a single label on the link itself; also cleans the doubled semicolons N2G's
+  XML templates leave in style strings). Applied by default; `--no-lucidify` skips it.
+- `nettopo l2 -i <dir> [--endpoints all|network-only]` is now a real command, writing
+  `output/l2/l2_full.drawio` or `output/l2/l2_network-only.drawio`.
+- `ingest/model_builder.py` now infers `Device.role` from CDP/LLDP capabilities
+  reported by neighbors (a device's own capture never reports its own capabilities),
+  applied before cross-discovery link deduplication so both ends of a
+  source-to-source link get a role. This is what gives `render/icons.py` real data to
+  key off of.
+- `.github/workflows/publish.yml`: on tag `v*`, builds sdist+wheel and publishes to
+  PyPI via trusted publishing (OIDC) — no long-lived token in secrets. PyPI name
+  availability for `nettopo` verified (see `PROJECT_SPEC.md` section 1).
+- Security: `tests/test_no_network.py` extended to cover `nettopo l2` now that it
+  pulls in N2G/igraph.
 - Phase 2 L2 parsing + CSV: `ingest/base.py` (`DataSource` interface) and
   `ingest/files.py` (`FileDataSource`, reads `utf-8-sig`, identifies source devices via
   their prompt line); parsers for `show version`, `show cdp neighbors detail`,
@@ -32,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GitHub Actions pipeline running `ruff check`, `ruff format --check`, `mypy`,
   and `pytest --cov` on every push and pull request.
 - `CLAUDE.md` engineering conventions, `docs/architecture.md`, and this changelog.
+
+### Known limitations (tracked for Phase 4)
+
+- Cisco icon fidelity under a real Lucidchart import has not yet been manually
+  validated — checklist in `docs/architecture.md`.
+- MLAG/port-channel grouping in the L2 view has no data source yet (see the Phase 3
+  L2 view entry above) and is a no-op against real captures.
 
 ## [0.0.1] - 2026-08-06
 

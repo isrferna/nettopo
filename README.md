@@ -15,19 +15,30 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 2 — L2 parsing + CSV.** `nettopo parse -i <dir>` is real: it reads a directory of
-saved captures, parses `show version`/`show cdp neighbors detail`/`show lldp neighbors
-detail`/`show ip interface brief`/`show interfaces`/`show vlan brief` via
-ntc-templates, populates the normalized data model, and writes `devices.csv`,
-`interfaces.csv`, `neighbors.csv`, and `vlans.csv` to `output/csv/` (`stp.csv`,
-`hsrp.csv`, `bgp.csv` are header-only until Phases 4-6). No diagram rendering yet — `l2`,
+**Phase 3 — L2 view (v0.1 release).** `nettopo l2 -i <dir>` now renders a real draw.io
+diagram: nodes are devices styled with Cisco icons (`render/icons.py`) by inferred
+`DeviceRole`, links carry per-end interface labels, and `--endpoints
+all|network-only` filters the diagram. Output is post-processed by `lucidify` by
+default (`--no-lucidify` to skip it) so link labels survive Lucidchart import.
 `stp`, `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
+> **Known gap:** MLAG/port-channel grouping in the L2 view is implemented and tested
+> against the data model, but no shipped parser populates `Interface.po_id` yet (no
+> phase parses `show etherchannel summary`), so it is currently a no-op against real
+> captures. See [`docs/architecture.md`](docs/architecture.md).
+>
+> **Pending manual step:** Cisco `mxgraph.cisco.*` draw.io stencils are a confirmed
+> requirement but may degrade on Lucidchart import (Lucid uses a different shape
+> library). This must be validated with a real Lucid import before Phase 4 builds more
+> views on the same rendering approach — see the checklist in
+> [`docs/architecture.md`](docs/architecture.md#known-limitation-to-validate-early-cisco-icons-under-lucid-import).
+
 ## Installation
 
-Not yet published to PyPI. To install from source for development:
+Not yet published to PyPI (publishing happens on tagging `v0.1.0` after this PR merges,
+via `.github/workflows/publish.yml`). To install from source for development:
 
 ```bash
 git clone https://github.com/isrferna/nettopo.git
