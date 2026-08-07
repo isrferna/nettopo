@@ -15,10 +15,11 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 0 — scaffolding.** The repository layout and CLI skeleton exist; no parsing,
-modeling, or rendering logic has been implemented yet. See the delivery plan in
-[`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
-open issues for the phased build-out.
+**Phase 1 — foundations.** The repository layout, CLI skeleton, interface-name
+normalizer, normalized data model, and STP/HSRP grouping fingerprints exist; no
+ingestion, parsing, or rendering logic has been implemented yet. See the delivery plan
+in [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and
+the open issues for the phased build-out.
 
 ## Installation
 
