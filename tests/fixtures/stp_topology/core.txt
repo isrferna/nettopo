@@ -1,0 +1,95 @@
+core#show version
+Cisco IOS Software, IOSv Software (VIOS-ADVENTERPRISEK9-M), Version 15.6(2)T, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2016 by Cisco Systems, Inc.
+
+core uptime is 1 week, 2 days, 3 hours, 4 minutes
+System returned to ROM by power-on
+System image file is "flash:vios-adventerprisek9-m"
+
+cisco IOSv (revision 1.0) with 512000K bytes of memory.
+Processor board ID abc123
+2 Gigabit Ethernet interfaces
+Configuration register is 0x0
+
+core#show cdp neighbors detail
+-------------------------
+Device ID: dist-a
+Entry address(es):
+  IP address: 10.0.1.2
+Platform: cisco WS-C3850-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet0/1,  Port ID (outgoing port): GigabitEthernet0/1
+Holdtime : 150 sec
+
+Version :
+Cisco IOS Software
+
+advertisement version: 2
+
+-------------------------
+Device ID: dist-b
+Entry address(es):
+  IP address: 10.0.1.3
+Platform: cisco WS-C3850-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet0/2,  Port ID (outgoing port): GigabitEthernet0/1
+Holdtime : 150 sec
+
+Version :
+Cisco IOS Software
+
+advertisement version: 2
+
+Total cdp entries displayed : 2
+
+core#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     aaaa.bbbb.0001
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    24586  (priority 24576 sys-id-ext 10)
+             Address     aaaa.bbbb.0001
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi0/1                Desg FWD 4         128.1    P2p
+Gi0/2                Desg FWD 4         128.2    P2p
+
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24596
+             Address     aaaa.bbbb.0001
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    24596  (priority 24576 sys-id-ext 20)
+             Address     aaaa.bbbb.0001
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi0/1                Desg FWD 4         128.1    P2p
+Gi0/2                Desg FWD 4         128.2    P2p
+
+VLAN0030
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24606
+             Address     aaaa.bbbb.0001
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    24606  (priority 24576 sys-id-ext 30)
+             Address     aaaa.bbbb.0001
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi0/1                Desg FWD 4         128.1    P2p
+Gi0/2                Desg FWD 4         128.2    P2p

@@ -15,12 +15,16 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 3 — L2 view (v0.1 release).** `nettopo l2 -i <dir>` now renders a real draw.io
-diagram: nodes are devices styled with Cisco icons (`render/icons.py`) by inferred
-`DeviceRole`, links carry per-end interface labels, and `--endpoints
-all|network-only` filters the diagram. Output is post-processed by `lucidify` by
+**Phase 4 — STP.** `nettopo stp -i <dir>` now renders real per-VLAN spanning-tree
+draw.io diagrams: the root bridge is highlighted, links are colored by forwarding vs
+blocking port state and labeled with role/state at each end, and `--vlan N` or
+`--group-mode per-vlan|strict|topology` (with `--all` to write every resulting diagram)
+select which VLANs are rendered. `stp.csv` now includes both base and effective bridge
+priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icons
+(`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels and
+`--endpoints all|network-only` filtering. Output is post-processed by `lucidify` by
 default (`--no-lucidify` to skip it) so link labels survive Lucidchart import.
-`stp`, `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
+`hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
@@ -31,8 +35,9 @@ open issues for the phased build-out.
 >
 > **Pending manual step:** Cisco `mxgraph.cisco.*` draw.io stencils are a confirmed
 > requirement but may degrade on Lucidchart import (Lucid uses a different shape
-> library). This must be validated with a real Lucid import before Phase 4 builds more
-> views on the same rendering approach — see the checklist in
+> library). This still needs a real Lucid import to validate — Phase 4 proceeded on the
+> same rendering approach without it, since that validation requires interactive Lucid
+> access this project's automation doesn't have — see the checklist in
 > [`docs/architecture.md`](docs/architecture.md#known-limitation-to-validate-early-cisco-icons-under-lucid-import).
 
 ## Installation

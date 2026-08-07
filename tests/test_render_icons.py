@@ -33,3 +33,13 @@ def test_unknown_role_falls_back_to_a_plain_box_not_a_cisco_shape() -> None:
 def test_roles_map_to_distinct_shapes() -> None:
     shapes = {role: style_for_role(role) for role in _ROLES_WITH_CISCO_SHAPES}
     assert len(set(shapes.values())) == len(shapes)
+
+
+def test_highlight_overrides_the_stroke_color() -> None:
+    style = style_for_role(DeviceRole.SWITCH, highlight=True)
+    assert style.rstrip(";").split(";")[-1] == "strokeWidth=4"
+
+
+def test_no_highlight_keeps_the_default_stroke_color() -> None:
+    style = style_for_role(DeviceRole.SWITCH, highlight=False)
+    assert "#FFD700" not in style

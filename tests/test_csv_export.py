@@ -6,7 +6,18 @@ import csv
 from pathlib import Path
 
 from nettopo.export.csv_export import write_csv_tables
-from nettopo.model.entities import Device, Interface, Link, NetworkModel, Vlan
+from nettopo.model.entities import (
+    Device,
+    Interface,
+    Link,
+    NetworkModel,
+    StpBridge,
+    StpPort,
+    StpRole,
+    StpState,
+    StpVlan,
+    Vlan,
+)
 
 
 def _read_rows(path: Path) -> list[dict[str, str]]:
@@ -82,3 +93,58 @@ def test_formula_prefixed_cell_values_are_neutralized(tmp_path: Path) -> None:
     rows = _read_rows(csv_dir / "interfaces.csv")
     (row,) = [row for row in rows if row["name"] == "Gi1/0/1"]
     assert row["description"] == "'=cmd|calc"
+
+
+def test_stp_csv_has_one_row_per_port_with_base_and_effective_priority(tmp_path: Path) -> None:
+    model = _sample_model()
+    model.stp[10] = StpVlan(
+        vlan=10,
+        root_device="sw1",
+        bridges={
+            "sw1": StpBridge(
+                device="sw1",
+                vlan=10,
+                base_priority=24576,
+                sys_id_ext=10,
+                mac="aaaa.bbbb.0001",
+                is_root=True,
+            ),
+            "sw2": StpBridge(
+                device="sw2",
+                vlan=10,
+                base_priority=32768,
+                sys_id_ext=10,
+                mac="aaaa.bbbb.0002",
+            ),
+        },
+        ports={
+            ("sw1", "Gi1/0/1"): StpPort(
+                device="sw1",
+                vlan=10,
+                interface="Gi1/0/1",
+                role=StpRole.DESIGNATED,
+                state=StpState.FWD,
+                cost=4,
+            ),
+            ("sw2", "Gi1/0/2"): StpPort(
+                device="sw2",
+                vlan=10,
+                interface="Gi1/0/2",
+                role=StpRole.ROOT,
+                state=StpState.FWD,
+                cost=4,
+            ),
+        },
+    )
+    csv_dir = write_csv_tables(model, tmp_path)
+    rows = _read_rows(csv_dir / "stp.csv")
+
+    assert len(rows) == 2
+    sw2_row = next(row for row in rows if row["device"] == "sw2")
+    assert sw2_row["root_device"] == "sw1"
+    assert sw2_row["base_priority"] == "32768"
+    assert sw2_row["effective_priority"] == "32778"
+    assert sw2_row["is_root"] == "False"
+    assert sw2_row["interface"] == "Gi1/0/2"
+    assert sw2_row["role"] == "root"
+    assert sw2_row["state"] == "forwarding"

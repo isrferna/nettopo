@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+Phase 4: STP.
+
+### Added
+
+- `parsing/spanning_tree.py`: parses `show spanning-tree` (per-VLAN Rapid-PVST) with
+  its own regexes rather than ntc-templates -- the shipped template only captures the
+  port role/state/cost table, not the "Root ID"/"Bridge ID" blocks the data model
+  needs (bridge priority, MAC, root-election flag). One parser serves both IOS and
+  IOS-XE, which emit this command identically; `tests/fixtures/spanning_tree/` carries
+  a fixture for each. `ingest/model_builder.py` wires per-device captures into
+  `model.stp`, keyed by VLAN.
+- Phase 4 STP view: `views/stp.py` builds one render-ready `Diagram` per VLAN, or per
+  topology group under `--group-mode strict|topology` (grouped VLANs are guaranteed by
+  `model/grouping.py`'s fingerprints to render identically, so the view renders one
+  representative VLAN per group and names the output file with every VLAN id it
+  covers, e.g. `stp_vlans-10_20_30.drawio`). The root bridge is highlighted; links are
+  colored by forwarding/blocking port state and labeled with role/state at each end,
+  cross-referencing `model.links` for physical adjacency since `StpPort` alone doesn't
+  record which device is on the other end of a port.
+- `views/diagram.py`: `DiagramNode.highlight` and `DiagramLink.color` let a view drive
+  root-bridge and port-state styling without `render/` knowing about STP concepts.
+  `render/icons.py` and `render/drawio.py` apply them as draw.io style overrides.
+- `nettopo stp -i <dir> [--vlan N | --group-mode per-vlan|strict|topology] [--all]` is
+  now a real command, requiring either `--vlan` or `--all` (there is no single sensible
+  default among a potentially many-VLAN model), writing to `output/stp/`.
+- `export/csv_export.py` now writes real `stp.csv` rows (one per device/interface),
+  including both base and effective bridge priority.
+- Security: `tests/test_no_network.py` extended to cover `nettopo stp`.
+
+### Known limitations (carried forward)
+
+- Cisco icon fidelity under a real Lucidchart import still has not been manually
+  validated (see the Phase 3 entry below) -- Phase 4 proceeded on the same rendering
+  approach without it, since that validation needs interactive Lucid access this
+  project's automation doesn't have. Checklist in `docs/architecture.md`.
+- MLAG/port-channel grouping in the L2 view still has no data source (unchanged from
+  Phase 3).
+
 ## [0.1.0] - 2026-08-07
 
 First usable PyPI release.

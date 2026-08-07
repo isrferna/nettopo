@@ -92,3 +92,21 @@ VLAN Name                             Status    Ports
 ---- -------------------------------- --------- -------------------------------
 1    default                          active
 10   users                            active
+
+sw2-dist#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     001a.2b3c.4d02
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    24586  (priority 24576 sys-id-ext 10)
+             Address     001a.2b3c.4d02
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/1              Desg FWD 4         128.1    P2p

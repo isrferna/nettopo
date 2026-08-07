@@ -44,3 +44,14 @@ def test_l2_command_makes_zero_network_connections(
 
     assert exit_code == 0
     assert (tmp_path / "output" / "l2" / "l2_full.drawio").exists()
+
+
+def test_stp_command_makes_zero_network_connections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(socket, "socket", _deny_all_sockets)
+
+    exit_code = main(["stp", "-i", str(CAPTURES), "-o", str(tmp_path / "output"), "--vlan", "10"])
+
+    assert exit_code == 0
+    assert (tmp_path / "output" / "stp" / "stp_vlan10.drawio").exists()

@@ -80,3 +80,31 @@ def test_creates_parent_directories(tmp_path: Path) -> None:
     output_path = tmp_path / "nested" / "l2" / "l2_full.drawio"
     render_diagram(_diagram(), output_path)
     assert output_path.exists()
+
+
+def test_highlighted_node_style_carries_the_highlight_color(tmp_path: Path) -> None:
+    output_path = tmp_path / "stp.drawio"
+    diagram = Diagram(
+        nodes=[DiagramNode(id="root", label="root", role=DeviceRole.SWITCH, highlight=True)]
+    )
+    render_diagram(diagram, output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    node_cell = root.find(".//object[@id='root']/mxCell")
+    assert node_cell is not None
+    assert "#FFD700" in node_cell.get("style", "")
+
+
+def test_link_color_is_applied_to_the_edge_style(tmp_path: Path) -> None:
+    output_path = tmp_path / "stp.drawio"
+    diagram = Diagram(
+        nodes=[
+            DiagramNode(id="sw1", label="sw1", role=DeviceRole.SWITCH),
+            DiagramNode(id="sw2", label="sw2", role=DeviceRole.SWITCH),
+        ],
+        links=[DiagramLink(source="sw1", target="sw2", color="#C62828")],
+    )
+    render_diagram(diagram, output_path, apply_lucidify=False)
+
+    xml_text = output_path.read_text(encoding="utf-8")
+    assert "#C62828" in xml_text

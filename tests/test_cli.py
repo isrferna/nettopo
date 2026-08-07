@@ -10,9 +10,10 @@ import pytest
 from nettopo.cli import build_parser, main
 
 ALL_COMMANDS = {"parse", "l2", "stp", "hsrp", "bgp", "all"}
-UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2"}
+UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp"}
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
+STP_TOPOLOGY = Path(__file__).parent / "fixtures" / "stp_topology"
 
 
 @pytest.mark.parametrize("command", sorted(ALL_COMMANDS))
@@ -85,4 +86,51 @@ def test_l2_command_endpoints_network_only_writes_the_other_filename(tmp_path: P
 
 def test_l2_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
     exit_code = main(["l2", "-i", str(tmp_path / "does-not-exist")])
+    assert exit_code == 1
+
+
+def test_stp_command_requires_either_vlan_or_all(tmp_path: Path) -> None:
+    exit_code = main(["stp", "-i", str(CAPTURES), "-o", str(tmp_path / "output")])
+    assert exit_code == 1
+
+
+def test_stp_command_with_vlan_writes_a_single_diagram(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["stp", "-i", str(CAPTURES), "-o", str(output_dir), "--vlan", "10"])
+
+    assert exit_code == 0
+    assert (output_dir / "stp" / "stp_vlan10.drawio").exists()
+
+
+def test_stp_command_with_all_writes_one_diagram_per_vlan(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["stp", "-i", str(STP_TOPOLOGY), "-o", str(output_dir), "--all"])
+
+    assert exit_code == 0
+    stp_dir = output_dir / "stp"
+    assert {path.name for path in stp_dir.iterdir()} == {
+        "stp_vlan10.drawio",
+        "stp_vlan20.drawio",
+        "stp_vlan30.drawio",
+    }
+
+
+def test_stp_command_with_all_and_group_mode_topology_groups_matching_vlans(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(
+        ["stp", "-i", str(STP_TOPOLOGY), "-o", str(output_dir), "--all", "--group-mode", "topology"]
+    )
+
+    assert exit_code == 0
+    stp_dir = output_dir / "stp"
+    assert {path.name for path in stp_dir.iterdir()} == {
+        "stp_vlans-10_20.drawio",
+        "stp_vlan30.drawio",
+    }
+
+
+def test_stp_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
+    exit_code = main(["stp", "-i", str(tmp_path / "does-not-exist"), "--all"])
     assert exit_code == 1

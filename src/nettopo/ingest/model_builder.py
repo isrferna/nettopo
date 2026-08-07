@@ -22,10 +22,11 @@ from collections.abc import Iterable
 from dataclasses import replace
 
 from nettopo.ingest.base import DataSource
-from nettopo.model.entities import Device, DeviceRole, Link, NetworkModel
+from nettopo.model.entities import Device, DeviceRole, Link, NetworkModel, StpVlan
 from nettopo.parsing.cdp import parse_cdp
 from nettopo.parsing.interfaces import parse_interfaces
 from nettopo.parsing.lldp import parse_lldp
+from nettopo.parsing.spanning_tree import parse_spanning_tree
 from nettopo.parsing.version import parse_version
 from nettopo.parsing.vlan import parse_vlans
 
@@ -60,6 +61,14 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
 
         for vlan in parse_vlans(capture.raw_text, platform=platform):
             model.vlans.setdefault(vlan.vlan_id, vlan)
+
+        for stp_capture in parse_spanning_tree(hostname, capture.raw_text):
+            stp_vlan = model.stp.setdefault(stp_capture.vlan, StpVlan(vlan=stp_capture.vlan))
+            stp_vlan.bridges[hostname] = stp_capture.bridge
+            for port in stp_capture.ports:
+                stp_vlan.ports[(hostname, port.interface)] = port
+            if stp_capture.bridge.is_root:
+                stp_vlan.root_device = hostname
 
     known_hostnames = set(model.devices)
     links_by_key: dict[frozenset[tuple[str, str]], Link] = {}

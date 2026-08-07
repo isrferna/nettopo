@@ -8,10 +8,11 @@ primary debugging aid for a wrong diagram. One table per model entity. `stp.csv`
 from __future__ import annotations
 
 import csv
+from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 
-from nettopo.model.entities import NetworkModel
+from nettopo.model.entities import NetworkModel, StpPort
 
 # OWASP A03: a cell value parsed from device data (e.g. a hostname) that happens to
 # start with one of these characters would be interpreted as a formula by spreadsheet
@@ -53,7 +54,7 @@ def write_csv_tables(model: NetworkModel, output_root: Path) -> Path:
     _write_interfaces(csv_dir / "interfaces.csv", model)
     _write_neighbors(csv_dir / "neighbors.csv", model)
     _write_vlans(csv_dir / "vlans.csv", model)
-    _write_table(csv_dir / "stp.csv", _STP_HEADER, [])
+    _write_stp(csv_dir / "stp.csv", model)
     _write_table(csv_dir / "hsrp.csv", _HSRP_HEADER, [])
     _write_table(csv_dir / "bgp.csv", _BGP_HEADER, [])
 
@@ -148,6 +149,33 @@ def _write_vlans(path: Path, model: NetworkModel) -> None:
         for vlan in sorted(model.vlans.values(), key=lambda vlan: vlan.vlan_id)
     ]
     _write_table(path, header, rows)
+
+
+def _write_stp(path: Path, model: NetworkModel) -> None:
+    rows: list[tuple[object, ...]] = []
+    for stp_vlan in sorted(model.stp.values(), key=lambda stp_vlan: stp_vlan.vlan):
+        ports_by_device: dict[str, list[StpPort]] = defaultdict(list)
+        for (device, _interface), port in stp_vlan.ports.items():
+            ports_by_device[device].append(port)
+
+        for device, bridge in sorted(stp_vlan.bridges.items()):
+            for port in sorted(ports_by_device[device], key=lambda port: port.interface):
+                rows.append(
+                    (
+                        stp_vlan.vlan,
+                        device,
+                        stp_vlan.root_device,
+                        bridge.mac,
+                        bridge.base_priority,
+                        bridge.effective_priority,
+                        bridge.is_root,
+                        port.interface,
+                        port.role.value,
+                        port.state.value,
+                        port.cost,
+                    )
+                )
+    _write_table(path, _STP_HEADER, rows)
 
 
 def _write_table(path: Path, header: tuple[str, ...], rows: Sequence[tuple[object, ...]]) -> None:

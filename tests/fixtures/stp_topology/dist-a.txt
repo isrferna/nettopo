@@ -1,0 +1,98 @@
+dist-a#show version
+Cisco IOS Software, Catalyst L3 Switch Software (CAT3K_CAA-UNIVERSALK9-M), Version 15.2(4)E, RELEASE SOFTWARE (fc1)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2017 by Cisco Systems, Inc.
+
+dist-a uptime is 2 weeks, 1 day, 5 hours, 6 minutes
+System returned to ROM by power-on
+System image file is "flash:cat3k_caa-universalk9-mz"
+
+cisco WS-C3850-24P (revision 1.0) with 512000K bytes of memory.
+Processor board ID def456
+26 Gigabit Ethernet interfaces
+Configuration register is 0x0
+
+dist-a#show cdp neighbors detail
+-------------------------
+Device ID: core
+Entry address(es):
+  IP address: 10.0.1.1
+Platform: cisco IOSv,  Capabilities: Router
+Interface: GigabitEthernet0/1,  Port ID (outgoing port): GigabitEthernet0/1
+Holdtime : 150 sec
+
+Version :
+Cisco IOS Software
+
+advertisement version: 2
+
+-------------------------
+Device ID: dist-b
+Entry address(es):
+  IP address: 10.0.1.3
+Platform: cisco WS-C3850-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet0/2,  Port ID (outgoing port): GigabitEthernet0/2
+Holdtime : 150 sec
+
+Version :
+Cisco IOS Software
+
+advertisement version: 2
+
+Total cdp entries displayed : 2
+
+dist-a#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     aaaa.bbbb.0001
+             Cost        4
+             Port        1 (GigabitEthernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    28682  (priority 28672 sys-id-ext 10)
+             Address     aaaa.bbbb.0002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi0/1                Root FWD 4         128.1    P2p
+Gi0/2                Desg FWD 4         128.2    P2p
+
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24596
+             Address     aaaa.bbbb.0001
+             Cost        4
+             Port        1 (GigabitEthernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    28692  (priority 28672 sys-id-ext 20)
+             Address     aaaa.bbbb.0002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi0/1                Root FWD 4         128.1    P2p
+Gi0/2                Desg FWD 4         128.2    P2p
+
+VLAN0030
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24606
+             Address     aaaa.bbbb.0001
+             Cost        4
+             Port        1 (GigabitEthernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    28702  (priority 28672 sys-id-ext 30)
+             Address     aaaa.bbbb.0002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi0/1                Root FWD 4         128.1    P2p
+Gi0/2                Altn BLK 4         128.2    P2p
