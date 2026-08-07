@@ -34,6 +34,9 @@ Working title: **`nettopo`** (CLI command: `nettopo`). This is a placeholder —
 The name appears throughout this document; a rename is a single coordinated change across
 `pyproject.toml`, the package directory, the console-script entry point, and the docs.
 
+**Verified (Phase 3, 2026-08-07):** `nettopo` is unclaimed on PyPI (`pypi.org/pypi/nettopo/json`
+returns 404). No rename needed for the v0.1.0 release.
+
 ---
 
 ## 2. Scope
@@ -418,7 +421,9 @@ render-ready nodes/links. Views never parse text and never write files.
 > stencils. On Lucid import they may degrade to plain boxes because Lucid uses a different
 > shape library. Cisco icons are a confirmed requirement, so v1 keeps them and accepts this
 > tradeoff; validate the real fidelity with a live Lucid import before building the
-> remaining views.
+> remaining views. **Status:** rendering is implemented (`render/drawio.py`,
+> `render/icons.py`, `render/lucidify.py`); the live Lucid import itself is a manual step
+> not yet performed — see the checklist in `docs/architecture.md`.
 
 ### Layout
 

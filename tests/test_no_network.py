@@ -30,3 +30,17 @@ def test_parse_command_makes_zero_network_connections(
 
     assert exit_code == 0
     assert (tmp_path / "output" / "csv" / "devices.csv").exists()
+
+
+def test_l2_command_makes_zero_network_connections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Phase 3 adds N2G/igraph-backed rendering to the `l2` command; verify that new
+    # code path is covered by the same zero-network-connections guarantee rather than
+    # waiting for Phase 7's `all` command per the original plan in docs/architecture.md.
+    monkeypatch.setattr(socket, "socket", _deny_all_sockets)
+
+    exit_code = main(["l2", "-i", str(CAPTURES), "-o", str(tmp_path / "output")])
+
+    assert exit_code == 0
+    assert (tmp_path / "output" / "l2" / "l2_full.drawio").exists()

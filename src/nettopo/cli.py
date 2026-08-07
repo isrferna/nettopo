@@ -15,9 +15,13 @@ from collections.abc import Callable, Sequence
 from nettopo.export.csv_export import write_csv_tables
 from nettopo.ingest.files import FileDataSource
 from nettopo.ingest.model_builder import build_network_model
+from nettopo.render.drawio import render_diagram
 from nettopo.utils.paths import resolve_output_root
+from nettopo.views import l2 as l2_view
 
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+_L2_OUTPUT_FILENAMES = {"all": "l2_full.drawio", "network-only": "l2_network-only.drawio"}
 
 logger = logging.getLogger("nettopo")
 
@@ -133,15 +137,43 @@ def _run_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_l2(args: argparse.Namespace) -> int:
+    """Ingest captures, populate the model, and render the L2 draw.io diagram."""
+    try:
+        source = FileDataSource(args.input)
+        model = build_network_model(source, default_platform=args.platform)
+    except OSError as exc:
+        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        return 1
+
+    diagram = l2_view.build(model, endpoints=args.endpoints)
+
+    try:
+        output_root = resolve_output_root(args.output)
+        output_path = output_root / "l2" / _L2_OUTPUT_FILENAMES[args.endpoints]
+        render_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify)
+    except OSError as exc:
+        logger.error("Failed to write output to '%s': %s", args.output, exc)
+        return 1
+
+    logger.info(
+        "Rendered L2 diagram (%d node(s), %d link(s)) to %s",
+        len(diagram.nodes),
+        len(diagram.links),
+        output_path,
+    )
+    return 0
+
+
 def _run_unimplemented(args: argparse.Namespace) -> int:
-    """Placeholder handler: no view/render logic exists yet (Phase 3+)."""
+    """Placeholder handler: no view/render logic exists yet (Phase 4+)."""
     logger.error("'%s' is not implemented yet.", args.command)
     return 1
 
 
 _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "parse": _run_parse,
-    "l2": _run_unimplemented,
+    "l2": _run_l2,
     "stp": _run_unimplemented,
     "hsrp": _run_unimplemented,
     "bgp": _run_unimplemented,

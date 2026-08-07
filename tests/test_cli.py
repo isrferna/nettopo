@@ -10,7 +10,7 @@ import pytest
 from nettopo.cli import build_parser, main
 
 ALL_COMMANDS = {"parse", "l2", "stp", "hsrp", "bgp", "all"}
-UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse"}
+UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2"}
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
 
@@ -61,4 +61,28 @@ def test_parse_command_writes_every_csv_table(tmp_path: Path) -> None:
 
 def test_parse_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
     exit_code = main(["parse", "-i", str(tmp_path / "does-not-exist")])
+    assert exit_code == 1
+
+
+def test_l2_command_writes_the_full_diagram_by_default(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["l2", "-i", str(CAPTURES), "-o", str(output_dir)])
+
+    assert exit_code == 0
+    assert (output_dir / "l2" / "l2_full.drawio").exists()
+    assert not (output_dir / "l2" / "l2_network-only.drawio").exists()
+
+
+def test_l2_command_endpoints_network_only_writes_the_other_filename(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(
+        ["l2", "-i", str(CAPTURES), "-o", str(output_dir), "--endpoints", "network-only"]
+    )
+
+    assert exit_code == 0
+    assert (output_dir / "l2" / "l2_network-only.drawio").exists()
+
+
+def test_l2_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
+    exit_code = main(["l2", "-i", str(tmp_path / "does-not-exist")])
     assert exit_code == 1

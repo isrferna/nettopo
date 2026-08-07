@@ -6,19 +6,37 @@ short hostname (`sw2-dist`, from `show version`). Left unresolved, that mismatch
 create a duplicate, non-source `Device` for every link between two source devices. This
 module resolves neighbor names against the set of known source hostnames (exact match,
 then short-name-vs-FQDN) once every capture's own hostname is known.
+
+It also infers `Device.role` from CDP/LLDP capabilities so `render/icons.py` (Phase 3)
+has real data to key off of. A device's own CDP/LLDP output never reports its own
+capabilities, so a source device's role can only come from how its *neighbors* describe
+it. This must run on every raw discovered link, before deduplication: when both ends of
+a link are source devices, deduplication keeps only one direction's `Link` (see
+`_resolve`/`links_by_key` below), which would silently discard the only capability report
+naming whichever device ends up on the discarded side.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 
 from nettopo.ingest.base import DataSource
-from nettopo.model.entities import Device, Link, NetworkModel
+from nettopo.model.entities import Device, DeviceRole, Link, NetworkModel
 from nettopo.parsing.cdp import parse_cdp
 from nettopo.parsing.interfaces import parse_interfaces
 from nettopo.parsing.lldp import parse_lldp
 from nettopo.parsing.version import parse_version
 from nettopo.parsing.vlan import parse_vlans
+
+# Checked in priority order: a device reported with both "Router" and "Switch"
+# capabilities (e.g. a multilayer switch) is classified as a router first.
+_ROLE_BY_CAPABILITY: tuple[tuple[str, DeviceRole], ...] = (
+    ("Router", DeviceRole.ROUTER),
+    ("Switch", DeviceRole.SWITCH),
+    ("Phone", DeviceRole.PHONE),
+    ("Host", DeviceRole.HOST),
+)
 
 
 def build_network_model(source: DataSource, *, default_platform: str = "cisco_ios") -> NetworkModel:
@@ -55,9 +73,11 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
         )
         for link in discovered:
             resolved = replace(link, remote_device=_resolve(link.remote_device, known_hostnames))
-            model.devices.setdefault(
+            remote = model.devices.setdefault(
                 resolved.remote_device, Device(hostname=resolved.remote_device)
             )
+            if remote.role is DeviceRole.UNKNOWN:
+                remote.role = _infer_role(resolved.remote_capabilities)
             links_by_key.setdefault(resolved.key(), resolved)
 
     model.links = list(links_by_key.values())
@@ -71,3 +91,11 @@ def _resolve(neighbor_name: str, known_hostnames: set[str]) -> str:
     if short_name in known_hostnames:
         return short_name
     return neighbor_name
+
+
+def _infer_role(capabilities: Iterable[str]) -> DeviceRole:
+    capability_set = set(capabilities)
+    for capability, role in _ROLE_BY_CAPABILITY:
+        if capability in capability_set:
+            return role
+    return DeviceRole.UNKNOWN
