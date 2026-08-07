@@ -67,6 +67,10 @@ strict = true
 packages = ["nettopo"]
 mypy_path = "src"
 
+[[tool.mypy.overrides]]
+module = "ntc_templates.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=nettopo --cov-report=term-missing"

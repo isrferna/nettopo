@@ -1,0 +1,73 @@
+"""Wires ingestion -> parsers -> `NetworkModel` population (PROJECT_SPEC.md section 4).
+
+CDP/LLDP neighbors are frequently reported by their fully-qualified domain name (e.g.
+`sw2-dist.example.com`) even though the same device's own capture identifies it by its
+short hostname (`sw2-dist`, from `show version`). Left unresolved, that mismatch would
+create a duplicate, non-source `Device` for every link between two source devices. This
+module resolves neighbor names against the set of known source hostnames (exact match,
+then short-name-vs-FQDN) once every capture's own hostname is known.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+from nettopo.ingest.base import DataSource
+from nettopo.model.entities import Device, Link, NetworkModel
+from nettopo.parsing.cdp import parse_cdp
+from nettopo.parsing.interfaces import parse_interfaces
+from nettopo.parsing.lldp import parse_lldp
+from nettopo.parsing.version import parse_version
+from nettopo.parsing.vlan import parse_vlans
+
+
+def build_network_model(source: DataSource, *, default_platform: str = "cisco_ios") -> NetworkModel:
+    model = NetworkModel()
+    captures = list(source.discover())
+
+    hostname_by_hint: dict[str, str] = {}
+    for capture in captures:
+        platform = capture.platform_hint or default_platform
+        version_info = parse_version(capture.raw_text, platform=platform)
+        hostname = (version_info.hostname if version_info else None) or capture.device_hint
+        hostname_by_hint[capture.device_hint] = hostname
+
+        device = model.devices.setdefault(hostname, Device(hostname=hostname))
+        device.is_source = True
+        if version_info:
+            device.platform = version_info.platform
+            device.model = version_info.model
+            device.os = version_info.os
+        device.interfaces.update(parse_interfaces(capture.raw_text, platform=platform))
+
+        for vlan in parse_vlans(capture.raw_text, platform=platform):
+            model.vlans.setdefault(vlan.vlan_id, vlan)
+
+    known_hostnames = set(model.devices)
+    links_by_key: dict[frozenset[tuple[str, str]], Link] = {}
+
+    for capture in captures:
+        platform = capture.platform_hint or default_platform
+        local_device = hostname_by_hint[capture.device_hint]
+        discovered = (
+            *parse_cdp(local_device, capture.raw_text, platform=platform),
+            *parse_lldp(local_device, capture.raw_text, platform=platform),
+        )
+        for link in discovered:
+            resolved = replace(link, remote_device=_resolve(link.remote_device, known_hostnames))
+            model.devices.setdefault(
+                resolved.remote_device, Device(hostname=resolved.remote_device)
+            )
+            links_by_key.setdefault(resolved.key(), resolved)
+
+    model.links = list(links_by_key.values())
+    return model
+
+
+def _resolve(neighbor_name: str, known_hostnames: set[str]) -> str:
+    if neighbor_name in known_hostnames:
+        return neighbor_name
+    short_name = neighbor_name.split(".", 1)[0]
+    if short_name in known_hostnames:
+        return short_name
+    return neighbor_name

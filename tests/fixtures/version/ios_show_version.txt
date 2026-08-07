@@ -1,0 +1,23 @@
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2020 by Cisco Systems, Inc.
+Compiled Thu 06-Aug-20 03:20 by prod_rel_team
+
+ROM: Bootstrap program is C2960X boot loader
+BOOTLDR: C2960X Boot Loader (C2960X-HBOOT-M) Version 15.2(7r)E1, RELEASE SOFTWARE (fc1)
+
+sw1-access uptime is 3 weeks, 2 days, 4 hours, 20 minutes
+System returned to ROM by power-on
+System image file is "flash:/c2960x-universalk9-mz.152-7.E3/c2960x-universalk9-mz.152-7.E3.bin"
+
+
+cisco WS-C2960X-24TS-L (PowerPC405) processor (revision R0) with 524288K bytes of memory.
+Processor board ID FOC2134X0ABC
+Last reset from power-on
+1 Virtual Ethernet interface
+28 Gigabit Ethernet interfaces
+The password-recovery mechanism is enabled.
+
+64K bytes of flash-simulated non-volatile configuration memory.
+Base ethernet MAC Address       : 00:1A:2B:3C:4D:01
+Configuration register is 0xF

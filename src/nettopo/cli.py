@@ -12,6 +12,11 @@ import argparse
 import logging
 from collections.abc import Callable, Sequence
 
+from nettopo.export.csv_export import write_csv_tables
+from nettopo.ingest.files import FileDataSource
+from nettopo.ingest.model_builder import build_network_model
+from nettopo.utils.paths import resolve_output_root
+
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 logger = logging.getLogger("nettopo")
@@ -108,14 +113,34 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_unimplemented(command: str) -> int:
-    """Placeholder handler: no ingest/parse/view logic exists yet (Phase 0)."""
-    logger.error("'%s' is not implemented yet (Phase 0 scaffolding only).", command)
+def _run_parse(args: argparse.Namespace) -> int:
+    """Ingest captures, populate the model, and write every CSV table."""
+    try:
+        source = FileDataSource(args.input)
+        model = build_network_model(source, default_platform=args.platform)
+    except OSError as exc:
+        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        return 1
+
+    try:
+        output_root = resolve_output_root(args.output)
+        csv_dir = write_csv_tables(model, output_root)
+    except OSError as exc:
+        logger.error("Failed to write output to '%s': %s", args.output, exc)
+        return 1
+
+    logger.info("Parsed %d device(s); wrote CSV tables to %s", len(model.devices), csv_dir)
+    return 0
+
+
+def _run_unimplemented(args: argparse.Namespace) -> int:
+    """Placeholder handler: no view/render logic exists yet (Phase 3+)."""
+    logger.error("'%s' is not implemented yet.", args.command)
     return 1
 
 
-_COMMAND_HANDLERS: dict[str, Callable[[str], int]] = {
-    "parse": _run_unimplemented,
+_COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "parse": _run_parse,
     "l2": _run_unimplemented,
     "stp": _run_unimplemented,
     "hsrp": _run_unimplemented,
@@ -130,7 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=args.log_level, format="%(levelname)s: %(message)s")
 
     handler = _COMMAND_HANDLERS[args.command]
-    return handler(args.command)
+    return handler(args)
 
 
 if __name__ == "__main__":

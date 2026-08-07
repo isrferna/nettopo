@@ -5,15 +5,16 @@ behind them. It is kept in sync with the code — see the documentation-maintena
 in [`CLAUDE.md`](../CLAUDE.md). For scope, the full data model, and the CLI reference,
 see [`PROJECT_SPEC.md`](../PROJECT_SPEC.md).
 
-## Current state (Phase 1)
+## Current state (Phase 2)
 
-The repository layout, the CLI skeleton, and the Phase 1 foundations exist:
-`utils/interfaces.py` (interface-name normalizer), `model/entities.py` (data model
-dataclasses and enums), and `model/grouping.py` (STP/HSRP grouping fingerprints).
-`nettopo <command> -i <dir>` still parses its arguments and reports "not implemented
-yet" — no ingestion, parsing, view, or rendering logic has been written; nothing is
-user-visible yet. The sections below describe the target architecture that later
-phases build out incrementally.
+`nettopo parse -i <dir>` is real end-to-end: `ingest/files.py` reads a directory of
+saved captures, the `parsing/` modules extract structured data via ntc-templates,
+`ingest/model_builder.py` wires that into a populated `NetworkModel`, and
+`export/csv_export.py` writes `devices.csv`, `interfaces.csv`, `neighbors.csv`, and
+`vlans.csv` to `output/csv/` (`stp.csv`/`hsrp.csv`/`bgp.csv` stay header-only until
+Phases 4-6 add those parsers). `l2`, `stp`, `hsrp`, `bgp`, and `all` still report "not
+implemented yet" — no view or rendering logic has been written. The sections below
+describe the target architecture that later phases build out incrementally.
 
 ## Components
 
@@ -25,7 +26,8 @@ views/    one module per diagram (l2, stp, hsrp, bgp); reads the model, never pa
           text or writes files
 render/   draw.io emission via N2G, Cisco icon mapping, and the Lucidchart post-process
 export/   CSV writers, one table per model entity
-utils/    dependency-free shared services (currently: the interface-name normalizer)
+utils/    dependency-free shared services: the interface-name normalizer, the
+          multi-command capture splitter, and path/filename safety helpers
 cli.py    argument parsing and orchestration only — no business logic
 ```
 
@@ -54,6 +56,19 @@ reading a directory of saved captures. v1 ships file-based ingestion only (see
 `PROJECT_SPEC.md` section 2, "out of scope"), but the interface exists now so that a
 future live-collection source (netmiko/scrapli over SSH) can be added by implementing
 the same interface, without touching `parsing/`, `model/`, or `views/`.
+
+## Why CDP/LLDP neighbor names are resolved against known hostnames
+
+CDP/LLDP frequently report a neighbor by its fully-qualified domain name (e.g.
+`sw2-dist.example.com`) even when that same device's own capture identifies it by its
+short hostname (`sw2-dist`, from `show version`). Left unresolved, every link between
+two source devices would create a duplicate, non-source `Device` for the FQDN spelling,
+splitting one device into two in the model. `ingest/model_builder.py` builds the model in
+two passes: first every source device's canonical hostname is established from `show
+version`, then neighbor names are resolved against that set (exact match, then
+short-name-vs-FQDN) before links are created. A neighbor that matches no known source
+hostname (e.g. `core-rtr`, seen only in CDP output) is kept as a non-source `Device`
+under its reported name.
 
 ## Why interface-name normalization is centralized
 
@@ -90,7 +105,12 @@ views (STP, HSRP, BGP) are built on the same rendering approach.
 ## Security posture
 
 `nettopo` makes zero network connections by design — it only reads local capture files
-and writes local output files. `tests/test_no_network.py` (added when the `all` command
-is implemented) enforces this by monkeypatching `socket.socket` to fail and asserting a
-full run still succeeds. See `PROJECT_SPEC.md` section 11 for the full OWASP-adapted
-security review.
+and writes local output files. `tests/test_no_network.py` enforces this by
+monkeypatching `socket.socket` to fail and asserting a full `parse` run still succeeds;
+it will extend to cover `nettopo all` once Phase 7 adds that command. `utils/paths.py`
+sanitizes any filename derived from parsed data (hostnames, later VLAN ids) and resolves
+the output root before anything is written, so a value like `../../etc` can't make a
+derived filename escape the output directory. `export/csv_export.py` also neutralizes
+cell values that start with a formula-triggering character (`=`, `+`, `-`, `@`) so a
+hostname or description can't execute as a formula when the CSV is opened in spreadsheet
+software. See `PROJECT_SPEC.md` section 11 for the full OWASP-adapted security review.

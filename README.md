@@ -15,11 +15,15 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 1 — foundations.** The repository layout, CLI skeleton, interface-name
-normalizer, normalized data model, and STP/HSRP grouping fingerprints exist; no
-ingestion, parsing, or rendering logic has been implemented yet. See the delivery plan
-in [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and
-the open issues for the phased build-out.
+**Phase 2 — L2 parsing + CSV.** `nettopo parse -i <dir>` is real: it reads a directory of
+saved captures, parses `show version`/`show cdp neighbors detail`/`show lldp neighbors
+detail`/`show ip interface brief`/`show interfaces`/`show vlan brief` via
+ntc-templates, populates the normalized data model, and writes `devices.csv`,
+`interfaces.csv`, `neighbors.csv`, and `vlans.csv` to `output/csv/` (`stp.csv`,
+`hsrp.csv`, `bgp.csv` are header-only until Phases 4-6). No diagram rendering yet — `l2`,
+`stp`, `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
+[`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
+open issues for the phased build-out.
 
 ## Installation
 
