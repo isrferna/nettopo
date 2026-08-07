@@ -15,12 +15,16 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 3 — L2 view (v0.1 release).** `nettopo l2 -i <dir>` now renders a real draw.io
-diagram: nodes are devices styled with Cisco icons (`render/icons.py`) by inferred
-`DeviceRole`, links carry per-end interface labels, and `--endpoints
-all|network-only` filters the diagram. Output is post-processed by `lucidify` by
+**Phase 4 — STP.** `nettopo stp -i <dir>` now renders real per-VLAN spanning-tree
+draw.io diagrams: the root bridge is highlighted, links are colored by forwarding vs
+blocking port state and labeled with role/state at each end, and `--vlan N` or
+`--group-mode per-vlan|strict|topology` (with `--all` to write every resulting diagram)
+select which VLANs are rendered. `stp.csv` now includes both base and effective bridge
+priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icons
+(`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels and
+`--endpoints all|network-only` filtering. Output is post-processed by `lucidify` by
 default (`--no-lucidify` to skip it) so link labels survive Lucidchart import.
-`stp`, `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
+`hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
@@ -31,8 +35,9 @@ open issues for the phased build-out.
 >
 > **Pending manual step:** Cisco `mxgraph.cisco.*` draw.io stencils are a confirmed
 > requirement but may degrade on Lucidchart import (Lucid uses a different shape
-> library). This must be validated with a real Lucid import before Phase 4 builds more
-> views on the same rendering approach — see the checklist in
+> library). This still needs a real Lucid import to validate — Phase 4 proceeded on the
+> same rendering approach without it, since that validation requires interactive Lucid
+> access this project's automation doesn't have — see the checklist in
 > [`docs/architecture.md`](docs/architecture.md#known-limitation-to-validate-early-cisco-icons-under-lucid-import).
 
 ## Installation
@@ -50,17 +55,111 @@ Requires Python 3.11+.
 
 ## Usage
 
-```bash
-nettopo --help
-nettopo parse -i ./captures
-nettopo l2    -i ./captures --endpoints network-only
-nettopo stp   -i ./captures --group-mode topology --all
-nettopo hsrp  -i ./captures --vlan 10
-nettopo bgp   -i ./captures
-nettopo all   -i ./captures
+```
+nettopo [--log-level LEVEL] <command> [options]
 ```
 
-See [`PROJECT_SPEC.md`](PROJECT_SPEC.md#9-cli-design) for the full CLI reference.
+Every command reads a **directory** of saved capture files (see
+[Preparing captures](#preparing-captures) below) and writes into an output directory,
+creating it if needed. `parse`, `l2`, and `stp` are implemented; `hsrp`, `bgp`, and `all`
+are scaffolded but not yet implemented (running them prints `'<command>' is not
+implemented yet.` and exits with status 1 — see [Status](#status)).
+
+### Global option
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `--log-level` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `INFO` | Logging verbosity. Goes before the subcommand: `nettopo --log-level DEBUG l2 -i ./captures`. |
+
+### Options common to every command
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
+| `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
+| `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
+| `--no-lucidify` | flag | off | Skip the Lucidchart-import-friendliness post-process (`render/lucidify.py`) on generated `.drawio` files. Only affects commands that render diagrams (`l2`, `stp`; later `hsrp`, `bgp`, `all`) — `parse` ignores it. |
+
+### `nettopo parse`
+
+Ingests captures, builds the data model, and writes every CSV table — no diagrams. This
+is the primary debugging aid: if a diagram looks wrong, inspect the CSVs first to
+localize the fault to parsing vs. rendering.
+
+```bash
+nettopo parse -i ./captures -o ./output
+```
+
+Writes `output/csv/devices.csv`, `interfaces.csv`, `neighbors.csv`, `vlans.csv`,
+`stp.csv` (base *and* effective bridge priority — see
+[PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), and header-only `hsrp.csv`/`bgp.csv`
+until Phases 5–6 add those parsers.
+
+### `nettopo l2`
+
+Renders the physical/link-layer topology (from CDP/LLDP) as a draw.io diagram: nodes are
+devices styled with Cisco icons by inferred role, links carry per-end interface labels,
+and physical links sharing a local port-channel membership are grouped into one rendered
+link (MLAG).
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `--endpoints` | `all`, `network-only` | `all` | `all` includes every discovered device. `network-only` drops any device that isn't a source capture and wasn't reported by a neighbor with `Router`/`Switch` CDP/LLDP capabilities (i.e. drops hosts/phones, keeps the network). |
+
+```bash
+nettopo l2 -i ./captures --endpoints network-only
+```
+
+Writes `output/l2/l2_full.drawio` (endpoints `all`) or
+`output/l2/l2_network-only.drawio` (endpoints `network-only`).
+
+### `nettopo stp`
+
+Renders per-VLAN Rapid-PVST spanning-tree diagrams: switches only, root bridge
+highlighted, links colored by forwarding (green) vs. blocking (red) port state and
+labeled with role/state at each end. Node labels show the bridge MAC and effective
+priority (base priority is in `stp.csv`).
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `--vlan` | VLAN id, e.g. `10` | *(none)* | Restrict to a single VLAN's diagram. Mutually exclusive with `--group-mode`. |
+| `--group-mode` | `per-vlan`, `strict`, `topology` | `per-vlan` | How to group VLANs that would render identically. `per-vlan`: one diagram per VLAN, no grouping. `strict`: group VLANs whose root, bridge priorities, *and* port roles/states all match. `topology`: group VLANs whose root and port roles/states match, ignoring configured priorities (a looser match than `strict`). Mutually exclusive with `--vlan`. |
+| `--all` | flag | off | Write every resulting diagram (one per VLAN, or one per group under `--group-mode`) into `output/stp/`. |
+
+Either `--vlan` or `--all` is required — with neither, there's no single sensible
+default to render out of a potentially many-VLAN model, so the command exits with an
+error asking you to pick one.
+
+```bash
+nettopo stp -i ./captures --vlan 10                       # one diagram, VLAN 10 only
+nettopo stp -i ./captures --all                            # one diagram per VLAN
+nettopo stp -i ./captures --all --group-mode strict         # grouped by exact match
+nettopo stp -i ./captures --all --group-mode topology       # grouped by topology only
+```
+
+Filenames: `output/stp/stp_vlan10.drawio` for a single VLAN; for a group, a sorted,
+filesystem-safe name listing every VLAN it covers, e.g.
+`output/stp/stp_vlans-10_20_30.drawio`.
+
+### `nettopo hsrp`, `nettopo bgp`, `nettopo all` — not yet implemented
+
+These subcommands parse their arguments (`hsrp` already accepts the same
+`--vlan`/`--group-mode`/`--all` options as `stp`) but every run currently exits with
+status 1 and logs `'<command>' is not implemented yet.`. They land in Phases 5–7 — see
+[`PROJECT_SPEC.md` §14](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues).
+
+### Preparing captures
+
+The `-i`/`--input` directory holds one text file per device. Each file concatenates the
+outputs of several `show` commands, each preceded by that device's prompt line
+(`hostname#show ...`) — this is how `nettopo` both identifies the device as a *source*
+device (as opposed to one only ever mentioned by a neighbor) and splits the file back
+into per-command sections. Which commands each view needs is listed in
+[PROJECT_SPEC.md §4](PROJECT_SPEC.md#4-ingestion-v1-files-only); `tests/fixtures/captures/`
+has worked examples. Files are read as `utf-8-sig`, so a leading UTF-8 BOM is handled
+transparently.
+
+See [`PROJECT_SPEC.md` §9](PROJECT_SPEC.md#9-cli-design) for the CLI design rationale.
 
 ## Documentation
 

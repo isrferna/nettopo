@@ -31,10 +31,19 @@ _SHAPE_BY_ROLE: dict[DeviceRole, str] = {
 # rather than a Cisco stencil -- there is no meaningful "unknown device" Cisco icon.
 _DEFAULT_STYLE = "rounded=1;whiteSpace=wrap;html=1;"
 
+# Appended after the base style so its strokeColor/strokeWidth win over the base
+# suffix's own strokeColor -- draw.io's style parser takes the last occurrence of a
+# duplicate key. Used to highlight the STP root bridge (PROJECT_SPEC.md section 7).
+_HIGHLIGHT_SUFFIX = "strokeColor=#FFD700;strokeWidth=4;"
 
-def style_for_role(role: DeviceRole) -> str:
-    """Return the draw.io node style string for `role`."""
+
+def style_for_role(role: DeviceRole, *, highlight: bool = False) -> str:
+    """Return the draw.io node style string for `role`.
+
+    `highlight` overrides the border color/width, e.g. to mark the STP root bridge.
+    """
     shape = _SHAPE_BY_ROLE.get(role)
-    if shape is None:
-        return _DEFAULT_STYLE
-    return f"shape={shape};{_STYLE_SUFFIX}"
+    style = f"shape={shape};{_STYLE_SUFFIX}" if shape is not None else _DEFAULT_STYLE
+    if highlight:
+        style += _HIGHLIGHT_SUFFIX
+    return style

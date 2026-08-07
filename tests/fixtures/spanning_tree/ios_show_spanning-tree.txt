@@ -1,0 +1,34 @@
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     aaaa.bbbb.0001
+             Cost        4
+             Port        24 (GigabitEthernet1/0/24)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aaaa.bbbb.0002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/24             Root FWD 4         128.24   P2p
+Gi1/0/2              Altn BLK 4         128.2    P2p
+
+VLAN0099
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24675
+             Address     aaaa.bbbb.0002
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    24675  (priority 24576 sys-id-ext 99)
+             Address     aaaa.bbbb.0002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/24             Desg FWD 4         128.24   P2p

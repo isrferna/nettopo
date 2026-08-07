@@ -2,7 +2,8 @@
 
 Uses `tests/fixtures/captures/`: two source devices (`sw1-access`, IOS; `sw2-dist`,
 IOS-XE) that are CDP/LLDP neighbors of each other and of a third, non-source device
-(`core-rtr`) that only appears in CDP output.
+(`core-rtr`) that only appears in CDP output. Both source devices also carry VLAN 10
+`show spanning-tree` output (`sw2-dist` as root) for the STP wiring tests below.
 """
 
 from __future__ import annotations
@@ -66,6 +67,25 @@ def test_device_role_is_inferred_from_a_neighbors_reported_capabilities() -> Non
     # with "Capabilities: Router".
     model = _build_model()
     assert model.devices["core-rtr.example.com"].role is DeviceRole.ROUTER
+
+
+def test_stp_bridges_are_populated_per_vlan_from_both_devices() -> None:
+    model = _build_model()
+    vlan10 = model.stp[10]
+    assert set(vlan10.bridges) == {"sw1-access", "sw2-dist"}
+    assert vlan10.bridges["sw2-dist"].base_priority == 24576
+
+
+def test_stp_root_device_is_the_bridge_that_reports_itself_as_root() -> None:
+    model = _build_model()
+    assert model.stp[10].root_device == "sw2-dist"
+
+
+def test_stp_ports_are_keyed_by_device_and_interface() -> None:
+    model = _build_model()
+    vlan10 = model.stp[10]
+    assert ("sw1-access", "Gi1/0/24") in vlan10.ports
+    assert vlan10.ports[("sw1-access", "Gi1/0/24")].role.value == "root"
 
 
 def test_both_ends_of_a_source_to_source_link_get_a_role() -> None:

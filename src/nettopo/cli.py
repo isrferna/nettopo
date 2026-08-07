@@ -15,9 +15,11 @@ from collections.abc import Callable, Sequence
 from nettopo.export.csv_export import write_csv_tables
 from nettopo.ingest.files import FileDataSource
 from nettopo.ingest.model_builder import build_network_model
+from nettopo.model.grouping import GroupMode
 from nettopo.render.drawio import render_diagram
 from nettopo.utils.paths import resolve_output_root
 from nettopo.views import l2 as l2_view
+from nettopo.views import stp as stp_view
 
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
@@ -165,8 +167,37 @@ def _run_l2(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_stp(args: argparse.Namespace) -> int:
+    """Ingest captures, populate the model, and render per-VLAN/grouped STP diagrams."""
+    if args.vlan is None and not args.all:
+        logger.error("'stp' requires either --vlan <N> or --all.")
+        return 1
+
+    try:
+        source = FileDataSource(args.input)
+        model = build_network_model(source, default_platform=args.platform)
+    except OSError as exc:
+        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        return 1
+
+    group_mode = GroupMode(args.group_mode)
+    groups = stp_view.build_groups(model, group_mode=group_mode, vlan=args.vlan)
+
+    try:
+        output_root = resolve_output_root(args.output)
+        for group in groups:
+            output_path = output_root / "stp" / stp_view.stp_output_filename(group.vlan_ids)
+            render_diagram(group.diagram, output_path, apply_lucidify=not args.no_lucidify)
+    except OSError as exc:
+        logger.error("Failed to write output to '%s': %s", args.output, exc)
+        return 1
+
+    logger.info("Rendered %d STP diagram(s) to %s", len(groups), output_root / "stp")
+    return 0
+
+
 def _run_unimplemented(args: argparse.Namespace) -> int:
-    """Placeholder handler: no view/render logic exists yet (Phase 4+)."""
+    """Placeholder handler: no view/render logic exists yet (Phase 5+)."""
     logger.error("'%s' is not implemented yet.", args.command)
     return 1
 
@@ -174,7 +205,7 @@ def _run_unimplemented(args: argparse.Namespace) -> int:
 _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "parse": _run_parse,
     "l2": _run_l2,
-    "stp": _run_unimplemented,
+    "stp": _run_stp,
     "hsrp": _run_unimplemented,
     "bgp": _run_unimplemented,
     "all": _run_unimplemented,

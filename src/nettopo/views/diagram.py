@@ -17,6 +17,7 @@ class DiagramNode:
     id: str
     label: str
     role: DeviceRole = DeviceRole.UNKNOWN
+    highlight: bool = False  # e.g. the STP root bridge
 
 
 @dataclass
@@ -26,6 +27,7 @@ class DiagramLink:
     src_label: str = ""  # interface label at the source end
     trgt_label: str = ""  # interface label at the target end
     label: str = ""  # label at the link's center
+    color: str | None = None  # draw.io hex stroke color override, e.g. STP port state
 
 
 @dataclass
