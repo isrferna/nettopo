@@ -1,0 +1,592 @@
+# PROJECT_SPEC.md — Network Diagram CLI
+
+> **Purpose of this document.** This is the master specification used to bootstrap the
+> repository and drive implementation. It defines scope, architecture, the data model,
+> the CLI surface, the phased delivery plan, testing, and CI/CD. It is meant to be read
+> together with **`CLAUDE.md`**, which governs all engineering conventions (documentation
+> maintenance, git workflow, English-only rule, SOLID/KISS/DRY/YAGNI, and the mandatory
+> OWASP security review). **When `CLAUDE.md` and this spec disagree on conventions,
+> `CLAUDE.md` wins.**
+>
+> Per the documentation-maintenance rule in `CLAUDE.md`, this file must be kept in sync
+> with the code: any change to scope, architecture, model, CLI, or dependencies updates
+> this spec in the same commit as `README.md`, `CHANGELOG.md`, and `docs/architecture.md`.
+
+---
+
+## 1. What this tool is
+
+A Python CLI that reads **saved `show` command outputs** from Cisco devices (files only —
+no live device connections in v1) and generates **network diagrams** in **draw.io format
+with Cisco icons**, plus the **intermediate data as CSV tables**.
+
+The tool produces four diagram views from the same parsed data model:
+
+1. **L2** — physical/link-layer topology from CDP/LLDP, with interface labels and MLAG.
+2. **STP** — per-VLAN Rapid-PVST spanning-tree state (root, bridge IDs, priorities, port roles/states).
+3. **HSRP** — first-hop redundancy per SVI (virtual IP, priority, active/standby/listen).
+4. **BGP** — BGP neighbor (session) graph.
+
+### Working package name
+
+Working title: **`nettopo`** (CLI command: `nettopo`). This is a placeholder —
+**verify availability on PyPI and GitHub before the first publish and rename if taken.**
+The name appears throughout this document; a rename is a single coordinated change across
+`pyproject.toml`, the package directory, the console-script entry point, and the docs.
+
+---
+
+## 2. Scope
+
+### In scope (v1)
+
+- Read-only ingestion of `show` command outputs from a local directory.
+- TextFSM parsing via **`ntc-templates`** (no ad-hoc regex parsers for production paths).
+- A normalized in-memory **data model** (dataclasses).
+- Four views: L2, STP, HSRP, BGP.
+- L2 endpoint filtering: full diagram (all neighbors) **and** network-only (routers/switches).
+- L2 interface labels and MLAG rendering **imitating current N2G behavior** (port-channel grouping).
+- STP and HSRP: **per-VLAN diagrams** and **two grouping modes** (see §6).
+- draw.io output with **Cisco icons** per device role.
+- **CSV export** of every intermediate table (neighbors, VLANs, STP, HSRP, BGP).
+- Bulk generation into a structured `output/` tree (e.g. `output/stp/`).
+- A **Lucidchart-friendliness post-process** (`lucidify`) applied to link labels.
+
+### Explicitly out of scope (v1) — YAGNI
+
+- Live collection over SSH (netmiko/scrapli). The ingestion layer is designed as an
+  interface so this can be added later, but no networking code ships in v1.
+- Nexus vPC domain/peer-link modeling. MLAG is **only** port-channel member grouping,
+  matching what N2G does today.
+- BGP route tables, policies, communities, route-reflector modeling. v1 is the
+  **session graph only**.
+- BGP `peer_device` resolution (peer IP → hostname). Left as `None` in v1.
+- Native Lucidchart API integration. v1 targets draw.io files that Lucid imports.
+- Any telemetry or network egress. The tool must make **zero** network connections (see §11).
+
+---
+
+## 3. Repository layout
+
+```
+nettopo/
+├── pyproject.toml
+├── README.md
+├── CHANGELOG.md
+├── CLAUDE.md
+├── PROJECT_SPEC.md            # this file
+├── docs/
+│   └── architecture.md        # components, call flows, design decisions
+├── src/
+│   └── nettopo/
+│       ├── __init__.py
+│       ├── cli.py             # CLI entry point (argument parsing, orchestration only)
+│       ├── ingest/            # data sources (file reader now; live later)
+│       │   ├── __init__.py
+│       │   ├── base.py        # DataSource interface
+│       │   └── files.py       # FileDataSource: read a directory of device captures
+│       ├── parsing/           # one parser per show command (TextFSM/ntc-templates)
+│       │   ├── __init__.py
+│       │   ├── cdp.py
+│       │   ├── lldp.py
+│       │   ├── spanning_tree.py
+│       │   ├── hsrp.py
+│       │   ├── interfaces.py  # show ip interface brief / show interfaces / show run interface
+│       │   ├── vlan.py
+│       │   ├── bgp.py
+│       │   └── version.py     # platform/model/os detection
+│       ├── model/             # the normalized data model + grouping logic
+│       │   ├── __init__.py
+│       │   ├── entities.py    # dataclasses + enums
+│       │   └── grouping.py    # fingerprint functions and group-mode logic
+│       ├── views/             # one module per diagram view; consumes the model
+│       │   ├── __init__.py
+│       │   ├── l2.py
+│       │   ├── stp.py
+│       │   ├── hsrp.py
+│       │   └── bgp.py
+│       ├── render/            # draw.io emission via N2G, styling, icons, lucidify
+│       │   ├── __init__.py
+│       │   ├── drawio.py      # thin wrapper over N2G drawio_diagram
+│       │   ├── icons.py       # DeviceRole -> Cisco shape mapping
+│       │   └── lucidify.py    # post-process draw.io XML for Lucid import
+│       ├── export/            # CSV writers
+│       │   ├── __init__.py
+│       │   └── csv_export.py
+│       └── utils/
+│           ├── __init__.py
+│           └── interfaces.py  # THE interface-name normalizer (central service)
+└── tests/
+    ├── fixtures/              # anonymized real captures used as parser inputs
+    ├── test_interfaces.py
+    ├── test_parsing_*.py
+    ├── test_grouping.py
+    ├── test_views_*.py
+    └── test_no_network.py
+```
+
+**Layering rule (Dependency Inversion):** dependencies point inward.
+`parsing` → `model`; `views` → `model`; `render`/`export` → `views`+`model`;
+`cli` orchestrates. `model` depends on nothing but `utils`. No module in `model`
+imports `render`, `views`, or N2G.
+
+---
+
+## 4. Ingestion (v1: files only)
+
+Input is a **directory**. Each file is one device's captured output containing several
+`show` commands concatenated, each preceded by its device prompt line
+(`hostname#show ...`). The prompt line is how a device is identified as a **source device**
+(we have its own capture, not just a neighbor mention).
+
+- **Encoding:** read files with `utf-8-sig` so a UTF-8 **BOM** is stripped transparently.
+  (A BOM on the first line silently breaks parsing otherwise.)
+- **Platform detection:** determine OS/platform per device by parsing `show version`
+  when present; otherwise fall back to a CLI `--platform` default (`cisco_ios`).
+  ntc-templates needs the platform to select the right template.
+- **Interface:** `ingest/base.py` defines `DataSource` with a method that yields
+  `(device_hint, raw_text, platform_hint)`. `FileDataSource` implements it over a directory.
+  A future `LiveDataSource` can implement the same interface without touching parsing/model.
+
+**Command set consumed (v1):**
+
+| View | Commands |
+|------|----------|
+| identity | `show version` |
+| L2 | `show cdp neighbors detail`, `show lldp neighbors detail` |
+| L3/VLAN | `show ip interface brief`, `show interfaces` (or `show run interface`), `show vlan brief` |
+| STP | `show spanning-tree` (per-VLAN Rapid-PVST) |
+| HSRP | `show standby brief` (and `show standby` if detail needed) |
+| BGP | `show ip bgp summary` |
+
+---
+
+## 5. Interface normalization (central service)
+
+`utils/interfaces.py` is the single source of truth for interface-name normalization and
+**every parser must route names through it**. This prevents silent correlation failures
+where the same physical port appears as `Gi1/0/1` in one command and
+`GigabitEthernet1/0/1` in another and therefore never matches.
+
+**Rule:** normalize to the **short canonical form**.
+
+| Long form | Canonical |
+|-----------|-----------|
+| GigabitEthernet | `Gi` |
+| TenGigabitEthernet | `Te` |
+| TwentyFiveGigE | `Twe` |
+| FortyGigabitEthernet | `Fo` |
+| HundredGigE | `Hu` |
+| FastEthernet | `Fa` |
+| Ethernet | `Eth` |
+| Port-channel | `Po` |
+| Vlan | `Vl` |
+| Loopback | `Lo` |
+| Tunnel | `Tu` |
+| Management | `Mgmt` |
+
+The normalizer must be pure, deterministic, idempotent (`normalize(normalize(x)) == normalize(x)`),
+and covered by exhaustive unit tests including already-abbreviated inputs and mixed casing.
+
+---
+
+## 6. Data model
+
+Defined in `model/entities.py`. Enums first (no bare strings for controlled vocabularies).
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass, field
+from enum import Enum
+
+
+class DeviceRole(Enum):
+    ROUTER = "router"; L3_SWITCH = "l3_switch"; SWITCH = "switch"
+    FIREWALL = "firewall"; AP = "ap"; PHONE = "phone"
+    SERVER = "server"; HOST = "host"; UNKNOWN = "unknown"
+
+
+class InterfaceType(Enum):
+    PHYSICAL = "physical"; SVI = "svi"; PORT_CHANNEL = "port_channel"
+    LOOPBACK = "loopback"; SUBINTERFACE = "subinterface"
+    MGMT = "mgmt"; TUNNEL = "tunnel"; UNKNOWN = "unknown"
+
+
+class StpRole(Enum):
+    ROOT = "root"; DESIGNATED = "designated"
+    ALTERNATE = "alternate"; BACKUP = "backup"; DISABLED = "disabled"
+
+
+class StpState(Enum):
+    FWD = "forwarding"; BLK = "blocking"; LRN = "learning"
+    LIS = "listening"; DIS = "disabled"
+
+
+class HsrpRole(Enum):
+    ACTIVE = "active"; STANDBY = "standby"; LISTEN = "listen"
+    INIT = "init"; SPEAK = "speak"
+
+
+class BgpType(Enum):
+    IBGP = "ibgp"; EBGP = "ebgp"
+
+
+@dataclass
+class Interface:
+    name: str                              # normalized: "Gi1/0/1", "Vl10", "Po1"
+    type: InterfaceType = InterfaceType.UNKNOWN
+    description: str | None = None
+    admin_up: bool | None = None
+    oper_up: bool | None = None
+    ip_address: str | None = None
+    prefix_len: int | None = None
+    vlan: int | None = None                # access VLAN, or the SVI number
+    mode: str | None = None                # "access" | "trunk"
+    trunk_vlans: list[int] = field(default_factory=list)
+    po_id: int | None = None               # if this port is a member of a port-channel
+    po_members: list[str] = field(default_factory=list)  # if this IS the port-channel (MLAG/LAG)
+
+
+@dataclass
+class Device:
+    hostname: str                          # canonical correlation key
+    is_source: bool = False                # we have this device's own capture
+    platform: str | None = None            # raw: "cisco C9300-48P"
+    model: str | None = None               # parsed: "C9300-48P"
+    os: str | None = None                  # "ios" | "ios-xe" | "nxos"
+    role: DeviceRole = DeviceRole.UNKNOWN
+    mgmt_ip: str | None = None
+    asn: int | None = None                 # for BGP
+    interfaces: dict[str, Interface] = field(default_factory=dict)  # keyed by normalized name
+
+
+@dataclass
+class Link:
+    local_device: str
+    local_interface: str
+    remote_device: str
+    remote_interface: str
+    discovery: str = "cdp"                  # "cdp" | "lldp"
+    remote_platform: str | None = None
+    remote_capabilities: list[str] = field(default_factory=list)  # ["Router","Switch"] vs ["Host","Phone"]
+
+    def key(self) -> frozenset:
+        """Direction-independent identity, used to de-duplicate A->B and B->A."""
+        return frozenset({
+            (self.local_device, self.local_interface),
+            (self.remote_device, self.remote_interface),
+        })
+
+
+@dataclass
+class StpBridge:
+    device: str
+    vlan: int
+    base_priority: int                     # configured base, e.g. 24576
+    sys_id_ext: int                        # normally equals the VLAN id
+    mac: str
+    is_root: bool = False
+
+    @property
+    def effective_priority(self) -> int:
+        return self.base_priority + self.sys_id_ext
+
+
+@dataclass
+class StpPort:
+    device: str
+    vlan: int
+    interface: str
+    role: StpRole
+    state: StpState
+    cost: int | None = None
+
+
+@dataclass
+class StpVlan:
+    vlan: int
+    root_device: str | None = None
+    bridges: dict[str, StpBridge] = field(default_factory=dict)
+    ports: dict[tuple[str, str], StpPort] = field(default_factory=dict)  # (device, interface)
+
+
+@dataclass
+class HsrpMember:
+    device: str
+    interface: str                         # the SVI: "Vl10"
+    group: int
+    priority: int
+    role: HsrpRole
+    preempt: bool | None = None
+
+
+@dataclass
+class HsrpGroup:
+    vlan: int
+    group: int
+    virtual_ip: str | None = None
+    members: dict[str, HsrpMember] = field(default_factory=dict)  # keyed by device
+
+
+@dataclass
+class BgpPeer:
+    local_device: str
+    local_asn: int
+    peer_ip: str
+    peer_asn: int
+    state: str                             # "Established", "Idle", "Active", ...
+    type: BgpType
+    peer_device: str | None = None         # v1: always None
+    vrf: str = "default"
+
+
+@dataclass
+class Vlan:
+    vlan_id: int
+    name: str | None = None
+    status: str | None = None
+
+
+@dataclass
+class NetworkModel:
+    devices: dict[str, Device] = field(default_factory=dict)          # keyed by hostname
+    links: list[Link] = field(default_factory=list)
+    vlans: dict[int, Vlan] = field(default_factory=dict)
+    stp: dict[int, StpVlan] = field(default_factory=dict)             # keyed by VLAN id
+    hsrp: dict[tuple[int, int], HsrpGroup] = field(default_factory=dict)  # (vlan, group)
+    bgp: list[BgpPeer] = field(default_factory=list)
+```
+
+### Grouping (STP and HSRP) — `model/grouping.py`
+
+Three generation modes, exposed on the CLI as `--group-mode`:
+
+| Mode | Meaning | Fingerprint contents |
+|------|---------|----------------------|
+| `per-vlan` (default) | One diagram per VLAN. No grouping. | n/a |
+| `strict` | Group VLANs whose diagrams would be **identical**, including configured priorities. | STP: root + sorted `(device, base_priority)` + sorted `(device, interface, role, state)`. HSRP: sorted `(device, role, priority)`. |
+| `topology` (aggressive) | Group VLANs with the **same topology**, ignoring priority values. | STP: root + sorted `(device, interface, role, state)`. HSRP: sorted `(device, role)`. |
+
+**Design principle:** grouping is by **resulting topology fingerprint**, never by raw
+configured priority alone. Equal priority does not guarantee equal topology (differing
+port costs or states can change the blocked link), and `strict` vs `topology` differ only
+in whether the priority values participate in the fingerprint. Both fingerprint functions
+live in `grouping.py` and are the most test-critical logic in the project (see §9).
+
+Group output naming: `stp_vlan10.drawio` (per-vlan), and for grouped modes a stable,
+sorted, filesystem-safe name such as `stp_vlans-10_20_30.drawio`.
+
+---
+
+## 7. Views
+
+Each view is a function `build(model, options) -> Diagram` that reads the model and returns
+render-ready nodes/links. Views never parse text and never write files.
+
+- **`l2`** — nodes = devices, links = `Link`s. Options: `--endpoints {all,network-only}`.
+  `network-only` keeps a device if `is_source` is true **or** its capabilities include
+  `Router`/`Switch` (this protects source devices, which never advertise their own
+  capabilities in their own CDP). Interface labels on both link ends; MLAG shown by
+  port-channel grouping, imitating N2G.
+- **`stp`** — switches only. Root highlighted; node labels show bridge ID + effective
+  priority (with base priority available in CSV); links colored by port state
+  (forwarding vs blocking) and labeled with role/state per end. Honors `--group-mode`
+  and `--vlan`.
+- **`hsrp`** — switches and their SVIs; per group show virtual IP, each member's priority
+  and role (active/standby/listen). Honors `--group-mode` and `--vlan`.
+- **`bgp`** — nodes = devices (labeled with ASN), edges = BGP sessions labeled with state;
+  iBGP vs eBGP styled differently. v1 shows the neighbor/session graph only.
+
+---
+
+## 8. Rendering and export
+
+### draw.io with Cisco icons — `render/`
+
+- `render/drawio.py` wraps **N2G `drawio_diagram`** and is the **only** module that imports
+  N2G. If N2G is ever replaced, only this module changes.
+- `render/icons.py` maps `DeviceRole` → Cisco draw.io shape
+  (`shape=mxgraph.cisco.*`), e.g. router, layer-3 switch, workgroup switch, IP phone,
+  server, PC.
+- `render/lucidify.py` post-processes the draw.io XML so link labels survive Lucid import:
+  N2G emits per-end interface labels as child-vertex cells with relative geometry, which
+  Lucid mangles; `lucidify` collapses each link's `src`/`trgt` labels into a single label
+  on the link's `<object>` and cleans malformed styles. Applied to every generated diagram
+  by default (a `--no-lucidify` flag can disable it).
+
+> **Known limitation to validate early (Phase 3):** `mxgraph.cisco.*` shapes are draw.io
+> stencils. On Lucid import they may degrade to plain boxes because Lucid uses a different
+> shape library. Cisco icons are a confirmed requirement, so v1 keeps them and accepts this
+> tradeoff; validate the real fidelity with a live Lucid import before building the
+> remaining views.
+
+### Layout
+
+Use N2G's igraph-backed layout (`kk` default). **`igraph` is a required dependency** —
+without it, layout is skipped and nodes overlap.
+
+### CSV export — `export/csv_export.py`
+
+CSV is a first-class output, not an afterthought: it is both a deliverable and the primary
+debugging aid (a wrong diagram is diagnosed by inspecting the CSV to localize the fault to
+parsing vs rendering). One table per entity: `devices.csv`, `interfaces.csv`,
+`neighbors.csv`, `vlans.csv`, `stp.csv`, `hsrp.csv`, `bgp.csv`. STP CSV includes both base
+and effective priority.
+
+### Output tree
+
+```
+output/
+├── csv/
+│   ├── devices.csv
+│   ├── neighbors.csv
+│   └── ...
+├── l2/
+│   ├── l2_full.drawio
+│   └── l2_network-only.drawio
+├── stp/
+│   └── stp_vlan10.drawio ...
+├── hsrp/
+│   └── hsrp_vlan10.drawio ...
+└── bgp/
+    └── bgp.drawio
+```
+
+Filenames derived from hostnames/VLANs must be sanitized (see §11, path handling).
+
+---
+
+## 9. CLI design
+
+Console script: `nettopo`. Subcommand per concern. Argument parsing lives only in `cli.py`;
+it orchestrates ingest → parse → model → view → render/export and contains no business logic.
+
+**Common options:** `-i/--input <dir>` (required), `-o/--output <dir>` (default `./output`),
+`--platform <default>` (default `cisco_ios`), `--no-lucidify`, `--log-level`.
+
+```
+nettopo parse   -i ./captures                      # parse only; write all CSV tables
+nettopo l2      -i ./captures [--endpoints all|network-only]
+nettopo stp     -i ./captures [--vlan N | --group-mode per-vlan|strict|topology] [--all]
+nettopo hsrp    -i ./captures [--vlan N | --group-mode per-vlan|strict|topology] [--all]
+nettopo bgp     -i ./captures
+nettopo all     -i ./captures                      # every view + every CSV
+```
+
+- `--vlan N` restricts to one VLAN (single diagram); mutually exclusive with `--group-mode`.
+- `--group-mode` default is `per-vlan`.
+- `--all` for `stp`/`hsrp` writes every resulting diagram into `output/<view>/`.
+
+---
+
+## 10. Dependencies
+
+**Runtime:** `n2g`, `textfsm`, `ntc-templates`, `python-igraph`.
+
+> **Do NOT depend on or install Flask/Werkzeug.** N2G's optional V3D viewer imports Flask
+> at module load; with Flask present but an incompatible Werkzeug on Python 3.12, that
+> import poisons the startup of **every** N2G command (`ast.Str` / `NameError: app`).
+> We never use the V3D viewer, so Flask must stay absent from the environment. If a future
+> need arises, isolate it in a separate optional extra and a separate Python 3.11 venv.
+
+**Dev:** `pytest`, `pytest-cov`, `ruff` (lint + format), `mypy` (type checking),
+`build`/`twine` (packaging). Pin versions in `pyproject.toml`.
+
+Target Python: **3.11+** (dataclasses with `X | None`, modern typing).
+
+---
+
+## 11. Security review (OWASP-adapted)
+
+Per `CLAUDE.md`, every change is checked against OWASP Top 10 (2021). For a local,
+file-reading CLI the relevant items are:
+
+- **A03 Injection** — parsing is done by the TextFSM engine over template **data**;
+  never `eval`/`exec`/`os.system` on parsed content or filenames. CLI parsing via the
+  standard argument parser.
+- **A08 Software & Data Integrity** — no `pickle`, no `yaml.load` (use `safe_load` if YAML
+  is ever added). TextFSM templates come from the installed `ntc-templates` package, not
+  from user-supplied executable code.
+- **Path handling (traversal)** — validate and normalize `--input`/`--output`. Output
+  filenames are derived from hostnames and VLAN ids: **sanitize** them (strip path
+  separators, quotes, whitespace) so a device named `../../etc` can't escape the output
+  directory. Refuse to write outside the resolved output root.
+- **Sensitive data** — inputs contain hostnames, management IPs, and topology. The tool
+  must not transmit them anywhere. **Hard requirement: zero network connections in v1.**
+  This is enforced by a test (`tests/test_no_network.py`) that monkeypatches
+  `socket.socket` to fail and asserts a full `all` run still succeeds — proving no code path
+  opens a socket. This is a verifiable guarantee, not a promise in prose.
+- **A10 SSRF** — not applicable in v1 (no server-side fetch). Becomes relevant only when
+  live collection is added; at that point target host and credential handling get their own
+  review.
+
+If a change touches any of the above and the mitigation isn't obvious from the diff, call it
+out in the PR description.
+
+---
+
+## 12. Testing strategy
+
+- **Parsers** — the highest-value tests: deterministic text-in / structure-out. Store
+  anonymized real captures in `tests/fixtures/` and assert the produced model objects.
+  Cover IOS and IOS-XE output variants.
+- **Interface normalizer** — exhaustive table-driven tests, including idempotency and
+  already-abbreviated inputs.
+- **Grouping fingerprints** — dedicated tests, especially the boundary case: **same
+  priority, different topology** (must NOT group under `strict` **or** `topology` when the
+  blocked link differs), and **same topology, different priority** (must group under
+  `topology` but NOT under `strict`).
+- **Views/render** — assert the draw.io XML is well-formed and that expected nodes/links
+  exist; do not assert pixel positions.
+- **No-network** — see §11.
+
+Coverage target: meaningful coverage on `parsing`, `model`, and `views`; `render` covered
+at the well-formed-XML level.
+
+---
+
+## 13. CI/CD (GitHub Actions)
+
+- **On every push / PR:** `ruff check` + `ruff format --check`, `mypy`, `pytest --cov`.
+  The pipeline must be green from the very first commit of Phase 0.
+- **On tag `v*`:** build sdist+wheel and publish to PyPI via trusted publishing
+  (OIDC, no long-lived token in secrets).
+- Branch protection on `main`: no direct pushes; PRs require passing checks.
+
+---
+
+## 14. Delivery plan (sequential GitHub issues)
+
+Each phase is one or more issues. Per `CLAUDE.md`: branch per issue
+(`feat/…` / `fix/…`), open a PR into `main`, never commit to `main` directly, and update
+`README.md` / `CHANGELOG.md` / `docs/architecture.md` / this spec in the same commit as the
+change.
+
+- **Phase 0 — Scaffolding.** Repo, `pyproject.toml`, `src/` layout, empty CLI skeleton,
+  Actions pipeline (lint + type + test) green, branch protection, issue labels. No logic.
+- **Phase 1 — Foundations.** Interface normalizer (`utils/interfaces.py`) with full tests;
+  data model dataclasses + enums (`model/entities.py`); grouping fingerprints
+  (`model/grouping.py`) with tests. Nothing user-visible yet.
+- **Phase 2 — L2 parsing + CSV.** `ingest/files.py`, CDP/LLDP parsers, `version.py`,
+  populate the model, `nettopo parse` writing all CSV tables. First tangible output.
+- **Phase 3 — L2 view (v0.1 release).** draw.io render wrapper, icons, endpoint filter
+  (`all` / `network-only`), interface labels, MLAG, `lucidify`. **Validate Lucid import
+  fidelity here.** First usable PyPI release.
+- **Phase 4 — STP.** `spanning_tree.py` parser, `StpVlan` population, per-VLAN + both
+  grouping modes, `output/stp/` bulk generation, STP CSV.
+- **Phase 5 — HSRP.** `hsrp.py` parser, `standby brief`, per-VLAN + grouping, `output/hsrp/`,
+  HSRP CSV. Structurally analogous to STP.
+- **Phase 6 — BGP.** `bgp.py` parser (`bgp summary`), session graph, iBGP/eBGP styling,
+  BGP CSV. `peer_device` stays `None`.
+- **Phase 7 — Polish.** `lucidify` refinements, per-view layout tuning, docs, `nettopo all`.
+
+Each phase after Phase 3 is an incremental PyPI release. Publish early; L2 done well is
+worth more than a half-finished grand plan.
+
+---
+
+## 15. Documents to keep in sync
+
+Per `CLAUDE.md`, these are updated together whenever behavior/structure/deps change:
+`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `docs/architecture.md`, and this
+`PROJECT_SPEC.md`. None may describe a state of the project that no longer exists.
