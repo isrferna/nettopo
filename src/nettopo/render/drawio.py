@@ -27,7 +27,7 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
     drawing.add_diagram(_DIAGRAM_ID)
 
     for node in diagram.nodes:
-        style = style_for_role(node.role, highlight=node.highlight)
+        style = style_for_role(node.role, highlight=node.highlight, inferred=node.inferred)
         drawing.add_node(id=node.id, label=node.label, style=style)
 
     for link in diagram.links:

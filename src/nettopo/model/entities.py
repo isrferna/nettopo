@@ -47,6 +47,7 @@ class StpState(Enum):
     LRN = "learning"
     LIS = "listening"
     DIS = "disabled"
+    BKN = "broken"  # the port is up but STP refuses to use it (PVID/type inconsistency)
 
 
 class HsrpRole(Enum):
@@ -88,6 +89,7 @@ class Device:
     serial: str | None = None  # own `show version`, or the suffix NX-OS advertises
     role: DeviceRole = DeviceRole.UNKNOWN
     mgmt_ip: str | None = None  # as a neighbor advertises it over CDP/LLDP
+    chassis_id: str | None = None  # base MAC, as an LLDP neighbor advertises it
     asn: int | None = None  # for BGP
     interfaces: dict[str, Interface] = field(default_factory=dict)  # keyed by normalized name
 
@@ -101,6 +103,7 @@ class Link:
     discovery: str = "cdp"  # "cdp" | "lldp"
     remote_platform: str | None = None
     remote_mgmt_ip: str | None = None
+    remote_chassis_id: str | None = None  # LLDP only; CDP never advertises a chassis MAC
     remote_capabilities: list[str] = field(default_factory=list)  # ["Router","Switch"] vs [...]
 
     def key(self) -> frozenset[tuple[str, str]]:
@@ -112,6 +115,17 @@ class Link:
             }
         )
 
+    def oriented(self, source: str) -> tuple[str, str]:
+        """This link's (source-end, target-end) interfaces when drawn from `source`.
+
+        Only one direction of each physical link survives ingestion, and which one depends
+        on whose capture reported it, so any view that draws links in its own chosen
+        orientation has to re-point the interfaces to match.
+        """
+        if self.local_device == source:
+            return self.local_interface, self.remote_interface
+        return self.remote_interface, self.local_interface
+
 
 @dataclass
 class StpBridge:
@@ -121,6 +135,7 @@ class StpBridge:
     sys_id_ext: int  # normally equals the VLAN id
     mac: str
     is_root: bool = False
+    root_mac: str = ""  # the elected root's address, whether or not that root is this bridge
 
     @property
     def effective_priority(self) -> int:
@@ -135,12 +150,24 @@ class StpPort:
     role: StpRole
     state: StpState
     cost: int | None = None
+    link_type: str = ""  # the Type column verbatim: "P2p", "P2p Edge", "Shr", "P2p Peer(STP)"
+
+    @property
+    def is_edge(self) -> bool:
+        """Whether PortFast is enabled, i.e. the port faces a host rather than a switch.
+
+        Read off the Type column as a token rather than a substring: the two spellings
+        differ by platform (`P2p Edge` on IOS-XE, `Edge P2p` on NX-OS) and the column
+        carries unrelated words that a substring test would confuse it with.
+        """
+        return "edge" in self.link_type.casefold().split()
 
 
 @dataclass
 class StpVlan:
     vlan: int
-    root_device: str | None = None
+    root_device: str | None = None  # None when the root is a device we hold no capture for
+    root_mac: str = ""  # the elected root's address, even when `root_device` is unknown
     bridges: dict[str, StpBridge] = field(default_factory=dict)
     ports: dict[tuple[str, str], StpPort] = field(default_factory=dict)  # (device, interface)
 
@@ -190,3 +217,22 @@ class NetworkModel:
     stp: dict[int, StpVlan] = field(default_factory=dict)  # keyed by VLAN id
     hsrp: dict[tuple[int, int], HsrpGroup] = field(default_factory=dict)  # (vlan, group)
     bgp: list[BgpPeer] = field(default_factory=list)
+
+    def port_channel_name(self, hostname: str, interface_name: str) -> str | None:
+        """The port-channel `interface_name` on `hostname` belongs to (or is), if any.
+
+        Which bundle a physical port belongs to is a property of the model, not of any one
+        view: both the L2 view (to collapse an adjacency onto its bundle) and the STP view
+        (to find the logical port `show spanning-tree` reports the bundle under) need the
+        same answer. Only source devices have interfaces populated, so an adjacency to a
+        device we hold no capture for resolves from its near end alone.
+        """
+        device = self.devices.get(hostname)
+        if device is None:
+            return None
+        interface = device.interfaces.get(interface_name)
+        if interface is None:
+            return None
+        if interface.po_id is not None:
+            return f"Po{interface.po_id}"
+        return interface.name if interface.po_members else None

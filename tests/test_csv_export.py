@@ -154,3 +154,39 @@ def test_stp_csv_has_one_row_per_port_with_base_and_effective_priority(tmp_path:
     assert sw2_row["interface"] == "Gi1/0/2"
     assert sw2_row["role"] == "root"
     assert sw2_row["state"] == "forwarding"
+
+
+def test_stp_csv_carries_the_root_address_and_port_type(tmp_path: Path) -> None:
+    # Both columns exist to debug a wrong diagram from the CSV alone: the root address
+    # says whether the root is outside the captures, the type says which ports are edges.
+    model = _sample_model()
+    model.stp[10] = StpVlan(
+        vlan=10,
+        root_mac="aaaa.bbbb.9999",
+        bridges={
+            "sw1": StpBridge(
+                device="sw1",
+                vlan=10,
+                base_priority=32768,
+                sys_id_ext=10,
+                mac="aaaa.bbbb.0001",
+                root_mac="aaaa.bbbb.9999",
+            )
+        },
+        ports={
+            ("sw1", "Gi1/0/1"): StpPort(
+                device="sw1",
+                vlan=10,
+                interface="Gi1/0/1",
+                role=StpRole.DESIGNATED,
+                state=StpState.FWD,
+                cost=4,
+                link_type="P2p Edge",
+            )
+        },
+    )
+    (row,) = _read_rows(write_csv_tables(model, tmp_path) / "stp.csv")
+
+    assert row["root_device"] == ""
+    assert row["root_mac"] == "aaaa.bbbb.9999"
+    assert row["link_type"] == "P2p Edge"

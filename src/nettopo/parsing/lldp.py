@@ -1,4 +1,9 @@
-"""Parser for `show lldp neighbors detail` (PROJECT_SPEC.md section 4)."""
+"""Parser for `show lldp neighbors detail` (PROJECT_SPEC.md section 4).
+
+LLDP is also the only protocol that reports a neighbor's chassis MAC, which CDP has no
+equivalent for. That address is what lets the STP view name a root bridge sitting outside
+the captures, by matching it against the root address `show spanning-tree` reports.
+"""
 
 from __future__ import annotations
 
@@ -39,6 +44,7 @@ def parse_lldp(local_device: str, raw_text: str, *, platform: str = "cisco_ios")
                 discovery="lldp",
                 remote_platform=record.get("platform") or None,
                 remote_mgmt_ip=record.get("mgmt_address") or None,
+                remote_chassis_id=record.get("chassis_id", "").strip() or None,
                 remote_capabilities=(record.get("capabilities") or "").replace(",", " ").split(),
             )
         )

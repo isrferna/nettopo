@@ -41,3 +41,10 @@ def test_parse_lldp_falls_back_to_port_id_when_the_description_is_free_text() ->
 
 def test_parse_lldp_returns_empty_list_when_command_absent() -> None:
     assert parse_lldp("sw1-access", "sw1-access#show version\nCisco IOS Software\n") == []
+
+
+def test_parse_lldp_captures_the_neighbors_chassis_address() -> None:
+    # The only place a neighbor's base MAC is reported at all: CDP has no equivalent, and
+    # the STP view matches it against the root bridge address to name an external root.
+    (link,) = parse_lldp("sw1-access", _capture())
+    assert link.remote_chassis_id == "001a.2b3c.4d02"

@@ -62,3 +62,43 @@ def test_iosxe_variant_parses_the_same_way() -> None:
 
 def test_returns_empty_list_when_command_absent() -> None:
     assert parse_spanning_tree("sw1", "sw1#show version\nCisco IOS Software\n") == []
+
+
+def test_root_address_is_captured_even_when_this_bridge_is_not_the_root() -> None:
+    (vlan10, vlan99) = parse_spanning_tree("sw1", _capture("ios_show_spanning-tree.txt"))
+    assert vlan10.bridge.root_mac == "aaaa.bbbb.0001"  # another switch holds the root
+    assert vlan99.bridge.root_mac == vlan99.bridge.mac  # this one is the root
+
+
+def _awkward_ports() -> dict[str, object]:
+    (vlan10,) = parse_spanning_tree("sw1", _capture("ios_show_spanning-tree_awkward_rows.txt"))
+    return {port.interface: port for port in vlan10.ports}
+
+
+def test_a_port_channel_is_parsed_under_its_bundle_name() -> None:
+    ports = _awkward_ports()
+    assert "Po1" in ports
+
+
+def test_an_inconsistency_marker_glued_to_the_state_does_not_drop_the_row() -> None:
+    # "BKN*ROOT_Inc" has no space before the cost; a stricter pattern loses the whole port
+    # and, with it, every link the STP view would have drawn through it.
+    ports = _awkward_ports()
+    assert ports["Gi1/0/5"].state is StpState.BKN
+    assert ports["Gi1/0/5"].role is StpRole.DESIGNATED
+    assert ports["Gi1/0/5"].cost == 19
+
+
+def test_the_type_column_is_captured_verbatim() -> None:
+    ports = _awkward_ports()
+    assert ports["Po1"].link_type == "P2p"
+    assert ports["Gi1/0/7"].link_type == "Shr"
+    assert ports["Gi1/0/8"].link_type == "P2p Edge"
+
+
+def test_is_edge_reflects_the_type_column() -> None:
+    ports = _awkward_ports()
+    assert ports["Gi1/0/8"].is_edge is True
+    assert ports["Gi1/0/6"].is_edge is True  # edge and inconsistent at the same time
+    assert ports["Po1"].is_edge is False
+    assert ports["Gi1/0/7"].is_edge is False

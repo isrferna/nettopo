@@ -1,0 +1,83 @@
+po-sw2#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+
+ROM: IOS-XE ROMMON
+
+po-sw2 uptime is 2 weeks, 3 days, 1 hour, 2 minutes
+System image file is "flash:packages.conf"
+
+
+cisco C9300-24P (X86) processor with 1367424K/6147K bytes of memory.
+Processor board ID FOC2540X0BB
+Configuration register is 0x102
+
+po-sw2#show cdp neighbors detail
+-------------------------
+Device ID: po-sw1
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: cisco C9300-24P,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 151 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+-------------------------
+Device ID: po-sw1
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: cisco C9300-24P,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 151 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+Total cdp entries displayed : 2
+
+po-sw2#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Port-channel1          unassigned      YES unset  up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+GigabitEthernet1/0/2   unassigned      YES unset  up                    up
+
+po-sw2#show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      N - not in use, no aggregation
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP      Gi1/0/1(P)  Gi1/0/2(P)
+
+po-sw2#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     aaaa.bbbb.9999
+             Cost        7
+             Port        664 (Port-channel1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aaaa.bbbb.0002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Po1                  Root FWD 3         128.664  P2p

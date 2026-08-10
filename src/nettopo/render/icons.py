@@ -36,14 +36,22 @@ _DEFAULT_STYLE = "rounded=1;whiteSpace=wrap;html=1;"
 # duplicate key. Used to highlight the STP root bridge (PROJECT_SPEC.md section 7).
 _HIGHLIGHT_SUFFIX = "strokeColor=#FFD700;strokeWidth=4;"
 
+# Same last-occurrence-wins trick, overriding the base suffix's `dashed=0`. Marks a device
+# we hold no capture for, drawn only from what its neighbors reported: a dashed border is
+# what stops a reader from taking an inference for a measurement.
+_INFERRED_SUFFIX = "dashed=1;dashPattern=8 8;"
 
-def style_for_role(role: DeviceRole, *, highlight: bool = False) -> str:
+
+def style_for_role(role: DeviceRole, *, highlight: bool = False, inferred: bool = False) -> str:
     """Return the draw.io node style string for `role`.
 
     `highlight` overrides the border color/width, e.g. to mark the STP root bridge.
+    `inferred` dashes the border, marking a device known only through its neighbors.
     """
     shape = _SHAPE_BY_ROLE.get(role)
     style = f"shape={shape};{_STYLE_SUFFIX}" if shape is not None else _DEFAULT_STYLE
     if highlight:
         style += _HIGHLIGHT_SUFFIX
+    if inferred:
+        style += _INFERRED_SUFFIX
     return style

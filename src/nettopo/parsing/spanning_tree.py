@@ -38,9 +38,14 @@ _BRIDGE_ID_BLOCK = re.compile(
 _PORT_TABLE_HEADER = re.compile(
     r"^Interface\s+Role\s+Sts\s+Cost\s+Prio\.Nbr\s+Type\s*$", re.MULTILINE
 )
+# IOS marks an inconsistent port by gluing the reason onto the state ("BKN*ROOT_Inc",
+# "BKN*PVID_Inc"), so the state is read as letters plus an optional starred suffix rather
+# than as a whole whitespace-delimited field. Requiring a space there instead drops the
+# entire row -- the bridge is still created but its ports are not, which silently costs
+# the STP view every link through that port.
 _PORT_ROW = re.compile(
-    r"^(?P<interface>\S+)\s+(?P<role>[A-Za-z]+)\s+(?P<state>[A-Za-z]+)\s+"
-    r"(?P<cost>\d+)\s+\S+\s+\S.*$"
+    r"^(?P<interface>\S+)\s+(?P<role>[A-Za-z]+)\s+(?P<state>[A-Za-z]+)(?:\*\S*)?\s+"
+    r"(?P<cost>\d+)\s+\S+\s+(?P<link_type>\S.*?)\s*$"
 )
 
 _ROLE_BY_ABBREVIATION: dict[str, StpRole] = {
@@ -56,6 +61,7 @@ _STATE_BY_ABBREVIATION: dict[str, StpState] = {
     "lrn": StpState.LRN,
     "lis": StpState.LIS,
     "dis": StpState.DIS,
+    "bkn": StpState.BKN,
 }
 
 
@@ -98,6 +104,7 @@ def _parse_vlan_block(local_device: str, vlan_id: int, block: str) -> StpVlanCap
         sys_id_ext=int(bridge_match.group("sys_id_ext")),
         mac=bridge_match.group("bridge_address"),
         is_root=root_match.group("is_root") is not None,
+        root_mac=root_match.group("root_address"),
     )
     return StpVlanCapture(
         vlan=vlan_id, bridge=bridge, ports=tuple(_parse_ports(local_device, vlan_id, block))
@@ -133,6 +140,7 @@ def _parse_ports(local_device: str, vlan_id: int, block: str) -> list[StpPort]:
                 role=role,
                 state=state,
                 cost=int(row_match.group("cost")),
+                link_type=row_match.group("link_type"),
             )
         )
     return ports

@@ -46,11 +46,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IP address`/`IPv4 Address`) are now handled, with the template's value kept as a
   fallback for neighbors that advertise no management address.
 
+- `nettopo --version` prints the installed version and exits. The string comes from the
+  installed distribution's metadata (the same source as `nettopo.__version__`), so it
+  cannot drift from `pyproject.toml` — but it does need `pip install -e .` re-run after a
+  version bump for the metadata to catch up.
+- The STP view now draws devices it holds no capture for. A switch seen only in a
+  neighbor's CDP/LLDP output is drawn with a dashed border and labeled with its name
+  alone (there is no bridge data to show for it), and is reached only through a port that
+  is not Edge/PortFast — the filter that keeps phones, access points and servers out of a
+  spanning-tree diagram. Requires the new `link_type` field, parsed from the Type column
+  of `show spanning-tree` and exported as `link_type` in `stp.csv`.
+- The STP view identifies a root bridge that sits outside the captures, by matching the
+  root address `show spanning-tree` reports against the chassis address an LLDP neighbor
+  advertises (`Link.remote_chassis_id` -> `Device.chassis_id`, both new; CDP advertises no
+  chassis address, so a CDP-only neighbor cannot be identified this way). The match is
+  exact, so it either names the root or reports nothing — it can never highlight the wrong
+  switch. With no match, the run warns and highlights nothing. `StpBridge.root_mac` and
+  `StpVlan.root_mac` are new, and `root_mac` is a new `stp.csv` column.
+- `nettopo stp` now logs node and link counts per diagram (matching what `nettopo l2`
+  already reported) and warns when a diagram has several nodes and no links at all. Each
+  dropped link is logged at DEBUG with the reason and the resolved port names, which
+  distinguishes a missing bundle table from a VLAN that is simply not allowed on a trunk.
+
+### Fixed
+
+- **The STP view drew no links at all on any network whose switches are joined by
+  port-channels.** Nodes rendered, the root was highlighted, and not one line appeared
+  between them. `show spanning-tree` reports a bundle as a single logical port (`Po1`)
+  while CDP/LLDP report its physical members (`Gi1/0/1`), so the lookup that joins the two
+  sources missed on both ends of every bundled link and dropped it silently. Member
+  interfaces are now resolved through `Interface.po_id`/`po_members` and collapse into one
+  link per bundle, labeled with the bundle name and carrying the members in its tooltip —
+  spanning-tree sees one logical port, so drawing one line per member would misrepresent
+  it. This needs `show etherchannel summary` (or `show port-channel summary`) in the
+  captures; without it there is nothing to map `Gi1/0/1` onto `Po1`, and the new warning
+  says so.
+- `parsing/spanning_tree.py` dropped any port row whose state carries an inconsistency
+  marker (`Desg BKN*ROOT_Inc`, `Desg BKN*PVID_Inc`), because the pattern required
+  whitespace where IOS glues the reason directly onto the state. The bridge was still
+  created, so the effect was the same silent one as above: a node with no link through
+  that port. `StpState.BKN` is new, and a broken port now colors its link as blocking.
+
 ### Changed
 
 - A bundle is now identified by the *device pair* rather than by the direction its
   members happen to be stored in, so members reported from opposite ends still collapse
   into one link.
+- `NetworkModel.port_channel_name()` replaces the L2 view's private bundle resolver, which
+  the STP view needed as well; `Link.oriented()` likewise replaces the copy each view kept
+  of the same re-pointing logic.
 
 ## [0.3.0rc1] - 2026-08-10
 

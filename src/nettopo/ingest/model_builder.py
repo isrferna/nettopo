@@ -63,6 +63,9 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
     mgmt_ip_by_hostname = _best_reported(
         discovered, canonical_by_spelling, lambda link: link.remote_mgmt_ip
     )
+    chassis_id_by_hostname = _best_reported(
+        discovered, canonical_by_spelling, lambda link: link.remote_chassis_id
+    )
 
     # One entry per (local port, neighbor): the two protocols describing the same
     # adjacency collapse here, before the direction-independent pass below collapses the
@@ -85,6 +88,8 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
         # capture, so this is the only source there is and source devices take it too.
         if remote.mgmt_ip is None:
             remote.mgmt_ip = mgmt_ip_by_hostname.get(resolved.remote_device)
+        if remote.chassis_id is None:
+            remote.chassis_id = chassis_id_by_hostname.get(resolved.remote_device)
 
         port_key = (resolved.local_device, resolved.local_interface, resolved.remote_device)
         existing = links_by_port.get(port_key)
@@ -130,6 +135,10 @@ def _populate_source_devices(
                 stp_vlan.ports[(hostname, port.interface)] = port
             if stp_capture.bridge.is_root:
                 stp_vlan.root_device = hostname
+            # Every bridge in a converged VLAN agrees on the root's address, so any one of
+            # them settles it -- including when the root is a device we hold no capture
+            # for and `root_device` therefore stays None.
+            stp_vlan.root_mac = stp_vlan.root_mac or stp_capture.bridge.root_mac
 
     return hostname_by_hint
 

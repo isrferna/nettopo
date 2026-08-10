@@ -28,6 +28,7 @@ from nettopo.model.entities import DeviceRole, InterfaceType, NetworkModel
 FIXTURES = Path(__file__).parent / "fixtures" / "captures"
 NXOS_FIXTURES = Path(__file__).parent / "fixtures" / "captures_nxos"
 PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "captures_portchannel"
+STP_PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "stp_portchannel"
 
 
 def _build_model() -> NetworkModel:
@@ -254,3 +255,14 @@ def test_an_interface_only_named_by_the_bundle_table_is_still_created(tmp_path: 
     interfaces = model.devices["sw9"].interfaces
     assert interfaces["Po4"].type is InterfaceType.PORT_CHANNEL
     assert interfaces["Gi1/0/4"].type is InterfaceType.PHYSICAL
+
+
+def test_a_neighbors_chassis_address_reaches_the_device_it_belongs_to() -> None:
+    model = build_network_model(FileDataSource(STP_PORT_CHANNEL_FIXTURES))
+    assert model.devices["core-rtr"].chassis_id == "aaaa.bbbb.9999"
+
+
+def test_the_root_address_is_recorded_even_when_no_captured_bridge_is_the_root() -> None:
+    stp_vlan = build_network_model(FileDataSource(STP_PORT_CHANNEL_FIXTURES)).stp[10]
+    assert stp_vlan.root_device is None
+    assert stp_vlan.root_mac == "aaaa.bbbb.9999"

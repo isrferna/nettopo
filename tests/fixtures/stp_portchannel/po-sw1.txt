@@ -1,0 +1,131 @@
+po-sw1#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+
+ROM: IOS-XE ROMMON
+
+po-sw1 uptime is 2 weeks, 3 days, 1 hour, 5 minutes
+System image file is "flash:packages.conf"
+
+
+cisco C9300-24P (X86) processor with 1367424K/6147K bytes of memory.
+Processor board ID FOC2540X0AA
+Configuration register is 0x102
+
+po-sw1#show cdp neighbors detail
+-------------------------
+Device ID: po-sw2
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco C9300-24P,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+-------------------------
+Device ID: po-sw2
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco C9300-24P,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+-------------------------
+Device ID: core-rtr
+Entry address(es):
+  IP address: 10.0.0.254
+Platform: cisco C9500-16X,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/24,  Port ID (outgoing port): GigabitEthernet0/1
+Holdtime : 148 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+-------------------------
+Device ID: esxi-host01
+Entry address(es):
+  IP address: 10.0.0.50
+Platform: VMware ESX,  Capabilities: Host
+Interface: GigabitEthernet1/0/10,  Port ID (outgoing port): vmnic0
+Holdtime : 140 sec
+
+Total cdp entries displayed : 4
+
+po-sw1#show lldp neighbors detail
+Local Intf: Gi1/0/24
+Chassis id: aaaa.bbbb.9999
+Port id: Gi0/1
+Port Description: GigabitEthernet0/1
+System Name: core-rtr
+
+System Description:
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+Time remaining: 112 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Addresses:
+    IP: 10.0.0.254
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 1
+
+po-sw1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Port-channel1          unassigned      YES unset  up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+GigabitEthernet1/0/2   unassigned      YES unset  up                    up
+GigabitEthernet1/0/10  unassigned      YES unset  up                    up
+GigabitEthernet1/0/24  unassigned      YES unset  up                    up
+
+po-sw1#show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      N - not in use, no aggregation
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP      Gi1/0/1(P)  Gi1/0/2(P)
+
+po-sw1#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     aaaa.bbbb.9999
+             Cost        4
+             Port        24 (GigabitEthernet1/0/24)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aaaa.bbbb.0001
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/10             Desg FWD 4         128.10   P2p Edge
+Gi1/0/24             Root FWD 4         128.24   P2p
+Po1                  Desg FWD 3         128.664  P2p

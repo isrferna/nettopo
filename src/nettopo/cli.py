@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import logging
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
+from nettopo import __version__
 from nettopo.export.csv_export import write_csv_tables
 from nettopo.ingest.files import FileDataSource
 from nettopo.ingest.model_builder import build_network_model
@@ -82,6 +84,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Generate draw.io network diagrams and CSV tables from saved "
             "Cisco show-command captures."
         ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show the installed nettopo version and exit.",
     )
     parser.add_argument(
         "--log-level",
@@ -207,12 +215,38 @@ def _run_stp(args: argparse.Namespace) -> int:
         for group in groups:
             output_path = output_root / "stp" / stp_view.stp_output_filename(group.vlan_ids)
             render_diagram(group.diagram, output_path, apply_lucidify=not args.no_lucidify)
+            _log_stp_group(group, output_path)
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
 
     logger.info("Rendered %d STP diagram(s) to %s", len(groups), output_root / "stp")
     return 0
+
+
+def _log_stp_group(group: stp_view.StpDiagramGroup, output_path: Path) -> None:
+    """Report a diagram's size, and warn about the one shape that is always a mistake.
+
+    A diagram with several switches and no links between them is what a silently dropped
+    link looks like from the outside -- most often a port-channel the captures never
+    described, since `show spanning-tree` names the bundle and CDP/LLDP name its members.
+    """
+    diagram = group.diagram
+    logger.info(
+        "Rendered STP diagram for VLAN(s) %s (%d node(s), %d link(s)) to %s",
+        ", ".join(str(vlan_id) for vlan_id in group.vlan_ids),
+        len(diagram.nodes),
+        len(diagram.links),
+        output_path,
+    )
+    if len(diagram.nodes) > 1 and not diagram.links:
+        logger.warning(
+            "VLAN(s) %s: %d node(s) but no links. Re-run as 'nettopo --log-level DEBUG stp "
+            "...' to see why each link was dropped; if the switches are joined by "
+            "port-channels, check that the captures include 'show etherchannel summary'.",
+            ", ".join(str(vlan_id) for vlan_id in group.vlan_ids),
+            len(diagram.nodes),
+        )
 
 
 def _run_unimplemented(args: argparse.Namespace) -> int:

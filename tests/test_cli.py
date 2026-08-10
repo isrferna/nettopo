@@ -16,6 +16,7 @@ UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp"}
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
 STP_TOPOLOGY = Path(__file__).parent / "fixtures" / "stp_topology"
 PORT_CHANNEL = Path(__file__).parent / "fixtures" / "captures_portchannel"
+STP_PORT_CHANNEL = Path(__file__).parent / "fixtures" / "stp_portchannel"
 
 
 @pytest.mark.parametrize("command", sorted(ALL_COMMANDS))
@@ -163,3 +164,22 @@ def test_stp_command_with_all_and_group_mode_topology_groups_matching_vlans(
 def test_stp_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
     exit_code = main(["stp", "-i", str(tmp_path / "does-not-exist"), "--all"])
     assert exit_code == 1
+
+
+def test_stp_diagram_actually_contains_links(tmp_path: Path) -> None:
+    # Asserting only that the file exists let a release ship STP diagrams made entirely of
+    # unconnected nodes, which is what a silently dropped link looks like on disk.
+    output_dir = tmp_path / "output"
+    exit_code = main(["stp", "-i", str(STP_TOPOLOGY), "-o", str(output_dir), "--vlan", "10"])
+
+    assert exit_code == 0
+    assert _link_count(output_dir / "stp" / "stp_vlan10.drawio") == 3
+
+
+def test_stp_diagram_draws_one_link_per_bundle_not_per_member(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["stp", "-i", str(STP_PORT_CHANNEL), "-o", str(output_dir), "--vlan", "10"])
+
+    assert exit_code == 0
+    # Po1 (two members, collapsed) plus the single physical link up to the uncaptured core.
+    assert _link_count(output_dir / "stp" / "stp_vlan10.drawio") == 2

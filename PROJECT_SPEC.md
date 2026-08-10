@@ -163,7 +163,7 @@ Input is a **directory**. Each file is one device's captured output containing s
 | identity | `show version` |
 | L2 | `show cdp neighbors detail`, `show lldp neighbors detail`, `show etherchannel summary` (IOS/IOS-XE) or `show port-channel summary` (NX-OS) |
 | L3/VLAN | `show ip interface brief`, `show interfaces`, `show vlan brief` |
-| STP | `show spanning-tree` (per-VLAN Rapid-PVST), **plus** the L2 discovery commands: spanning-tree output carries a device's own bridge and port states but never names the device on the other end of a port, so the STP view takes its links from the CDP/LLDP topology |
+| STP | `show spanning-tree` (per-VLAN Rapid-PVST), **plus** the L2 discovery commands: spanning-tree output carries a device's own bridge and port states but never names the device on the other end of a port, so the STP view takes its links from the CDP/LLDP topology. `show etherchannel summary` is required whenever links are bundled — spanning-tree names the port-channel (`Po1`) while CDP/LLDP name its members (`Gi1/0/1`), and only the bundle table joins the two. `show lldp neighbors detail` additionally lets an out-of-capture root bridge be identified, since its chassis address is the only thing that can be matched against the reported root address |
 | HSRP | `show standby brief` (and `show standby` if detail needed) |
 | BGP | `show ip bgp summary` |
 
@@ -438,6 +438,18 @@ render-ready nodes/links. Views never parse text and never write files.
   priority (with base priority available in CSV); links colored by port state
   (forwarding vs blocking) and labeled with role/state per end. Honors `--group-mode`
   and `--vlan`.
+  A port-channel is one logical STP port, so its members collapse into a single link
+  labeled with the bundle name, members carried in the tooltip — the same treatment
+  `l2 --link-mode port-channel` gives them, but unconditional here because spanning-tree
+  itself never reports the members.
+  Nodes come in two kinds: a device with a capture is drawn from its own `StpBridge`,
+  while a device known only from a neighbor's CDP/LLDP output is drawn dashed and labeled
+  with its name alone, since it has no bridge data to show. The latter is included only
+  through a **non-Edge** STP port — PortFast marks the ports facing hosts, and without
+  that filter every phone and access point would land in a spanning-tree diagram.
+  When the root bridge is one of those uncaptured devices, it is highlighted only if an
+  LLDP chassis address matches the reported root address exactly; otherwise the run warns
+  and nothing is highlighted, so the diagram never guesses at a root.
 - **`hsrp`** — switches and their SVIs; per group show virtual IP, each member's priority
   and role (active/standby/listen). Honors `--group-mode` and `--vlan`.
 - **`bgp`** — nodes = devices (labeled with ASN), edges = BGP sessions labeled with state;

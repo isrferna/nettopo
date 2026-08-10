@@ -28,16 +28,18 @@ own direction.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
 from enum import Enum
 
 from nettopo.model.entities import Link, NetworkModel
-from nettopo.views.diagram import Diagram, DiagramLink, DiagramNode
+from nettopo.views.diagram import (
+    Diagram,
+    DiagramLink,
+    DiagramNode,
+    join_interfaces,
+    members_tooltip,
+)
 
 _NETWORK_CAPABILITIES = {"Router", "Switch"}
-
-_INTERFACE_SEPARATOR = ", "
-_TOOLTIP_LINE_BREAK = "<br>"  # draw.io renders a link tooltip as (sanitized) HTML
 
 
 class LinkMode(Enum):
@@ -122,8 +124,8 @@ def _physical_link(link: Link) -> DiagramLink:
 
 def _bundle_ends(model: NetworkModel, link: Link) -> tuple[_BundleEnd, _BundleEnd] | None:
     """Return the link's two ends in device-name order, or None if no end is bundled."""
-    local = _port_channel_name(model, link.local_device, link.local_interface)
-    remote = _port_channel_name(model, link.remote_device, link.remote_interface)
+    local = model.port_channel_name(link.local_device, link.local_interface)
+    remote = model.port_channel_name(link.remote_device, link.remote_interface)
     if local is None and remote is None:
         return None
 
@@ -133,40 +135,12 @@ def _bundle_ends(model: NetworkModel, link: Link) -> tuple[_BundleEnd, _BundleEn
 
 def _bundle_link(ends: tuple[_BundleEnd, _BundleEnd], members: list[Link]) -> DiagramLink:
     (source, source_po), (target, target_po) = ends
-    member_pairs = sorted(_oriented_interfaces(member, source) for member in members)
+    member_pairs = sorted(member.oriented(source) for member in members)
 
     return DiagramLink(
         source=source,
         target=target,
-        src_label=source_po or _joined(pair[0] for pair in member_pairs),
-        trgt_label=target_po or _joined(pair[1] for pair in member_pairs),
-        tooltip=_TOOLTIP_LINE_BREAK.join(
-            ["Members:", *(f"{local} — {remote}" for local, remote in member_pairs)]
-        ),
+        src_label=source_po or join_interfaces(pair[0] for pair in member_pairs),
+        trgt_label=target_po or join_interfaces(pair[1] for pair in member_pairs),
+        tooltip=members_tooltip(member_pairs),
     )
-
-
-def _oriented_interfaces(link: Link, source: str) -> tuple[str, str]:
-    """Return the link's (source-end, target-end) interfaces for a bundle drawn from `source`."""
-    if link.local_device == source:
-        return link.local_interface, link.remote_interface
-    return link.remote_interface, link.local_interface
-
-
-def _port_channel_name(model: NetworkModel, hostname: str, interface_name: str) -> str | None:
-    """Return the port-channel `interface_name` belongs to (or is), if any.
-
-    Only source devices have interfaces populated, so an adjacency to a device we hold no
-    capture for is bundled by its near end alone.
-    """
-    interface = model.devices[hostname].interfaces.get(interface_name)
-    if interface is None:
-        return None
-    if interface.po_id is not None:
-        return f"Po{interface.po_id}"
-    return interface.name if interface.po_members else None
-
-
-def _joined(interface_names: Iterable[str]) -> str:
-    """Join member interfaces for the end of a bundle that has no port-channel name."""
-    return _INTERFACE_SEPARATOR.join(dict.fromkeys(interface_names))
