@@ -20,10 +20,12 @@ from nettopo.render.drawio import render_diagram
 from nettopo.utils.paths import resolve_output_root
 from nettopo.views import l2 as l2_view
 from nettopo.views import stp as stp_view
+from nettopo.views.l2 import LinkMode
 
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
-_L2_OUTPUT_FILENAMES = {"all": "l2_full.drawio", "network-only": "l2_network-only.drawio"}
+_L2_OUTPUT_STEMS = {"all": "l2_full", "network-only": "l2_network-only"}
+_L2_PORT_CHANNEL_SUFFIX = "_port-channels"
 
 logger = logging.getLogger("nettopo")
 
@@ -101,6 +103,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Which neighbor endpoints to include (default: %(default)s).",
     )
+    l2_parser.add_argument(
+        "--link-mode",
+        choices=tuple(mode.value for mode in LinkMode),
+        default=LinkMode.PHYSICAL.value,
+        help=(
+            "What a drawn link represents: one link per physical interface, or one "
+            "link per port-channel with its members in the link's tooltip "
+            "(default: %(default)s)."
+        ),
+    )
 
     stp_parser = subparsers.add_parser("stp", help="Generate per-VLAN spanning-tree diagrams.")
     _add_common_arguments(stp_parser)
@@ -148,11 +160,12 @@ def _run_l2(args: argparse.Namespace) -> int:
         logger.error("Failed to read captures from '%s': %s", args.input, exc)
         return 1
 
-    diagram = l2_view.build(model, endpoints=args.endpoints)
+    link_mode = LinkMode(args.link_mode)
+    diagram = l2_view.build(model, endpoints=args.endpoints, link_mode=link_mode)
 
     try:
         output_root = resolve_output_root(args.output)
-        output_path = output_root / "l2" / _L2_OUTPUT_FILENAMES[args.endpoints]
+        output_path = output_root / "l2" / _l2_output_filename(args.endpoints, link_mode)
         render_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify)
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
@@ -165,6 +178,12 @@ def _run_l2(args: argparse.Namespace) -> int:
         output_path,
     )
     return 0
+
+
+def _l2_output_filename(endpoints: str, link_mode: LinkMode) -> str:
+    """Name the L2 diagram after both of its options, so neither view overwrites the other."""
+    suffix = _L2_PORT_CHANNEL_SUFFIX if link_mode is LinkMode.PORT_CHANNEL else ""
+    return f"{_L2_OUTPUT_STEMS[endpoints]}{suffix}.drawio"
 
 
 def _run_stp(args: argparse.Namespace) -> int:

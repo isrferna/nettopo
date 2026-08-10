@@ -3,6 +3,7 @@ ingest -> model -> CSV pipeline (PROJECT_SPEC.md sections 4, 8, 9)."""
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp"}
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
 STP_TOPOLOGY = Path(__file__).parent / "fixtures" / "stp_topology"
+PORT_CHANNEL = Path(__file__).parent / "fixtures" / "captures_portchannel"
 
 
 @pytest.mark.parametrize("command", sorted(ALL_COMMANDS))
@@ -82,6 +84,33 @@ def test_l2_command_endpoints_network_only_writes_the_other_filename(tmp_path: P
 
     assert exit_code == 0
     assert (output_dir / "l2" / "l2_network-only.drawio").exists()
+
+
+def test_l2_command_link_mode_port_channel_writes_its_own_filename(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(
+        ["l2", "-i", str(PORT_CHANNEL), "-o", str(output_dir), "--link-mode", "port-channel"]
+    )
+
+    assert exit_code == 0
+    # Both link modes of the same endpoints selection must be able to coexist.
+    assert (output_dir / "l2" / "l2_full_port-channels.drawio").exists()
+    assert not (output_dir / "l2" / "l2_full.drawio").exists()
+
+
+def test_l2_command_link_mode_port_channel_draws_one_link_per_bundle(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    main(["l2", "-i", str(PORT_CHANNEL), "-o", str(output_dir)])
+    main(["l2", "-i", str(PORT_CHANNEL), "-o", str(output_dir), "--link-mode", "port-channel"])
+
+    physical = _link_count(output_dir / "l2" / "l2_full.drawio")
+    bundled = _link_count(output_dir / "l2" / "l2_full_port-channels.drawio")
+    assert (physical, bundled) == (3, 2)  # two bundled members collapse into one link
+
+
+def _link_count(path: Path) -> int:
+    root = ET.fromstring(path.read_text(encoding="utf-8"))
+    return len(root.findall(".//mxCell[@edge='1']"))
 
 
 def test_l2_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:

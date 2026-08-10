@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nettopo l2 --link-mode physical|port-channel`. `port-channel` draws one link per
+  bundle instead of one per member port: the ends that have a port-channel are labeled
+  with it (`Po150`), and the member interfaces are carried in the link's draw.io hover
+  tooltip. `physical` (the default) keeps the previous behavior, one link per discovered
+  adjacency. Links with no port-channel on either end render identically under both
+  modes. The two modes write different filenames
+  (`l2_full.drawio` vs `l2_full_port-channels.drawio`), so both can be generated into
+  one output directory.
+- `parsing/etherchannel.py`: parses `show etherchannel summary` (IOS/IOS-XE) and
+  `show port-channel summary` (NX-OS) into `Interface.po_id` on every bundle member and
+  `Interface.po_members` on the port-channel interface. These two model fields existed
+  since Phase 1 but no parser populated them, which is why port-channel grouping in the
+  L2 view had been a no-op against real captures; it now works from real data, and the
+  `po_id`/`po_members` columns in `interfaces.csv` are no longer always empty.
+- `DiagramLink.tooltip`, rendered by `render/drawio.py` as the link's draw.io `tooltip`
+  attribute.
+
+### Changed
+
+- A bundle is now identified by the *device pair* rather than by the direction its
+  members happen to be stored in, so members reported from opposite ends still collapse
+  into one link.
+
 ## [0.3.0rc1] - 2026-08-10
 
 Release candidate: neighbor identity resolution. Pre-releases are not installed by

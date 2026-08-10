@@ -96,6 +96,7 @@ nettopo/
 │       │   ├── spanning_tree.py
 │       │   ├── hsrp.py
 │       │   ├── interfaces.py  # show ip interface brief / show interfaces / show run interface
+│       │   ├── etherchannel.py  # show etherchannel summary / show port-channel summary
 │       │   ├── vlan.py
 │       │   ├── bgp.py
 │       │   └── version.py     # platform/model/os detection
@@ -160,7 +161,7 @@ Input is a **directory**. Each file is one device's captured output containing s
 | View | Commands |
 |------|----------|
 | identity | `show version` |
-| L2 | `show cdp neighbors detail`, `show lldp neighbors detail` |
+| L2 | `show cdp neighbors detail`, `show lldp neighbors detail`, `show etherchannel summary` (IOS/IOS-XE) or `show port-channel summary` (NX-OS) |
 | L3/VLAN | `show ip interface brief`, `show interfaces` (or `show run interface`), `show vlan brief` |
 | STP | `show spanning-tree` (per-VLAN Rapid-PVST) |
 | HSRP | `show standby brief` (and `show standby` if detail needed) |
@@ -424,11 +425,14 @@ sorted, filesystem-safe name such as `stp_vlans-10_20_30.drawio`.
 Each view is a function `build(model, options) -> Diagram` that reads the model and returns
 render-ready nodes/links. Views never parse text and never write files.
 
-- **`l2`** — nodes = devices, links = `Link`s. Options: `--endpoints {all,network-only}`.
+- **`l2`** — nodes = devices, links = `Link`s. Options: `--endpoints {all,network-only}`,
+  `--link-mode {physical,port-channel}`.
   `network-only` keeps a device if `is_source` is true **or** its capabilities include
   `Router`/`Switch` (this protects source devices, which never advertise their own
-  capabilities in their own CDP). Interface labels on both link ends; MLAG shown by
-  port-channel grouping, imitating N2G.
+  capabilities in their own CDP). Interface labels on both link ends. `--link-mode`
+  selects one link per physical adjacency (default) or one link per port-channel — MLAG
+  shown by port-channel grouping, imitating N2G — with the bundle's member interfaces
+  carried in the link's tooltip.
 - **`stp`** — switches only. Root highlighted; node labels show bridge ID + effective
   priority (with base priority available in CSV); links colored by port state
   (forwarding vs blocking) and labeled with role/state per end. Honors `--group-mode`
@@ -486,6 +490,7 @@ output/
 │   └── ...
 ├── l2/
 │   ├── l2_full.drawio
+│   ├── l2_full_port-channels.drawio
 │   └── l2_network-only.drawio
 ├── stp/
 │   └── stp_vlan10.drawio ...
@@ -509,13 +514,15 @@ it orchestrates ingest → parse → model → view → render/export and contai
 
 ```
 nettopo parse   -i ./captures                      # parse only; write all CSV tables
-nettopo l2      -i ./captures [--endpoints all|network-only]
+nettopo l2      -i ./captures [--endpoints all|network-only] [--link-mode physical|port-channel]
 nettopo stp     -i ./captures [--vlan N | --group-mode per-vlan|strict|topology] [--all]
 nettopo hsrp    -i ./captures [--vlan N | --group-mode per-vlan|strict|topology] [--all]
 nettopo bgp     -i ./captures
 nettopo all     -i ./captures                      # every view + every CSV
 ```
 
+- `--link-mode` default is `physical`; `port-channel` writes a `_port-channels`-suffixed
+  filename so both link modes can coexist in one output directory.
 - `--vlan N` restricts to one VLAN (single diagram); mutually exclusive with `--group-mode`.
 - `--group-mode` default is `per-vlan`.
 - `--all` for `stp`/`hsrp` writes every resulting diagram into `output/<view>/`.

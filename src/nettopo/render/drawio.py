@@ -12,7 +12,7 @@ from N2G import drawio_diagram
 
 from nettopo.render.icons import style_for_role
 from nettopo.render.lucidify import lucidify_xml
-from nettopo.views.diagram import Diagram
+from nettopo.views.diagram import Diagram, DiagramLink
 
 _DIAGRAM_ID = "diagram_1"
 
@@ -38,6 +38,7 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
             src_label=link.src_label,
             trgt_label=link.trgt_label,
             style=_link_style(link.color),
+            data=_link_data(link),
         )
 
     # igraph-backed layout (PROJECT_SPEC.md section 8); without it nodes overlap.
@@ -60,3 +61,12 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
 def _link_style(color: str | None) -> str:
     """Return a draw.io style override for `color`, or "" to use N2G's default."""
     return f"strokeColor={color};strokeWidth=2;" if color is not None else ""
+
+
+def _link_data(link: DiagramLink) -> dict[str, str]:
+    """Extra `<object>` attributes for the link.
+
+    draw.io shows the `tooltip` attribute on hover instead of its default dump of every
+    attribute, which is how a port-channel link reveals its member interfaces.
+    """
+    return {"tooltip": link.tooltip} if link.tooltip else {}

@@ -21,18 +21,14 @@ blocking port state and labeled with role/state at each end, and `--vlan N` or
 `--group-mode per-vlan|strict|topology` (with `--all` to write every resulting diagram)
 select which VLANs are rendered. `stp.csv` now includes both base and effective bridge
 priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icons
-(`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels and
-`--endpoints all|network-only` filtering. Output is post-processed by `lucidify` by
+(`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels,
+`--endpoints all|network-only` filtering and `--link-mode physical|port-channel`
+(MLAG links drawn once per bundle). Output is post-processed by `lucidify` by
 default (`--no-lucidify` to skip it) so link labels survive Lucidchart import.
 `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
-> **Known gap:** MLAG/port-channel grouping in the L2 view is implemented and tested
-> against the data model, but no shipped parser populates `Interface.po_id` yet (no
-> phase parses `show etherchannel summary`), so it is currently a no-op against real
-> captures. See [`docs/architecture.md`](docs/architecture.md).
->
 > **Pending manual step:** Cisco `mxgraph.cisco.*` draw.io stencils are a confirmed
 > requirement but may degrade on Lucidchart import (Lucid uses a different shape
 > library). This still needs a real Lucid import to validate — Phase 4 proceeded on the
@@ -111,20 +107,30 @@ model is built — see
 ### `nettopo l2`
 
 Renders the physical/link-layer topology (from CDP/LLDP) as a draw.io diagram: nodes are
-devices styled with Cisco icons by inferred role, links carry per-end interface labels,
-and physical links sharing a local port-channel membership are grouped into one rendered
-link (MLAG).
+devices styled with Cisco icons by inferred role, and links carry per-end interface
+labels.
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
 | `--endpoints` | `all`, `network-only` | `all` | `all` includes every discovered device. `network-only` drops any device that isn't a source capture and wasn't reported by a neighbor with `Router`/`Switch` CDP/LLDP capabilities (i.e. drops hosts/phones, keeps the network). |
+| `--link-mode` | `physical`, `port-channel` | `physical` | What a drawn link represents. `physical`: one link per discovered adjacency, labeled with the physical interface at each end. `port-channel`: adjacencies belonging to the same bundle collapse into a single link labeled `Po150` (MLAG), with the member interfaces in the link's hover tooltip. Links with no port-channel on either end are drawn the same way in both modes, so this option only changes the diagram where bundles actually exist. |
 
 ```bash
-nettopo l2 -i ./captures --endpoints network-only
+nettopo l2 -i ./captures --endpoints network-only --link-mode port-channel
 ```
 
 Writes `output/l2/l2_full.drawio` (endpoints `all`) or
-`output/l2/l2_network-only.drawio` (endpoints `network-only`).
+`output/l2/l2_network-only.drawio` (endpoints `network-only`); under `--link-mode
+port-channel` the filename gains a `_port-channels` suffix
+(`l2_full_port-channels.drawio`), so both link modes of the same topology can live side
+by side in one output directory.
+
+Port-channel mode needs `show etherchannel summary` (IOS/IOS-XE) or `show port-channel
+summary` (NX-OS) in the capture — without it no bundles are known and the diagram is
+identical to `physical`. Bundle membership is also exported in `interfaces.csv`
+(`po_id`, `po_members`), which is the quickest way to check whether that command was
+captured and parsed. The tooltip is a draw.io feature: hover the link in draw.io to see
+which physical ports the bundle carries.
 
 ### `nettopo stp`
 
