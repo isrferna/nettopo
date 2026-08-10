@@ -42,8 +42,14 @@ open issues for the phased build-out.
 
 ## Installation
 
-Not yet published to PyPI (publishing happens on tagging `v0.1.0` after this PR merges,
-via `.github/workflows/publish.yml`). To install from source for development:
+```bash
+pip install nettopo
+```
+
+Pre-releases (`0.3.0rc1` and the like) are published from the same pipeline but `pip`
+skips them unless asked: `pip install --pre nettopo`, or pin the exact version. Each
+release is published to PyPI by `.github/workflows/publish.yml` when a `v*` tag is
+pushed. To install from source for development:
 
 ```bash
 git clone https://github.com/isrferna/nettopo.git
