@@ -292,7 +292,7 @@ class Interface:
 class Device:
     hostname: str                          # canonical correlation key
     is_source: bool = False                # we have this device's own capture
-    platform: str | None = None            # raw: "cisco C9300-48P"
+    platform: str | None = None            # raw: "cisco C9300-48P"; own `show version`, or CDP/LLDP
     model: str | None = None               # parsed: "C9300-48P"
     os: str | None = None                  # "ios" | "ios-xe" | "nxos"
     serial: str | None = None              # own `show version`, or the NX-OS name suffix

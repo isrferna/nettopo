@@ -66,6 +66,7 @@ def test_devices_csv_has_one_row_per_device(tmp_path: Path) -> None:
     assert {row["hostname"] for row in rows} == {"sw1", "sw2"}
     sw1 = next(row for row in rows if row["hostname"] == "sw1")
     assert sw1["is_source"] == "True"
+    assert sw1["platform"] == "cisco C9300"
     assert sw1["os"] == "ios"
     assert sw1["serial"] == "FOC2134X0ABC"
 

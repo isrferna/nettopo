@@ -57,6 +57,7 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
         (link.remote_device for link in discovered), set(model.devices)
     )
     serial_by_hostname = _serials(canonical_by_spelling)
+    platform_by_hostname = _platforms(discovered, canonical_by_spelling)
 
     # One entry per (local port, neighbor): the two protocols describing the same
     # adjacency collapse here, before the direction-independent pass below collapses the
@@ -71,6 +72,10 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
             remote.role = _infer_role(resolved.remote_capabilities)
         if remote.serial is None:
             remote.serial = serial_by_hostname.get(resolved.remote_device)
+        # A source device's own `show version` is authoritative even when it yielded no
+        # platform, so a neighbor's guess never overwrites it.
+        if remote.platform is None and not remote.is_source:
+            remote.platform = platform_by_hostname.get(resolved.remote_device)
 
         port_key = (resolved.local_device, resolved.local_interface, resolved.remote_device)
         existing = links_by_port.get(port_key)
@@ -159,6 +164,27 @@ def _serials(canonical_by_spelling: dict[str, str]) -> dict[str, str]:
         for spelling, canonical in canonical_by_spelling.items()
         if (serial := split_serial_suffix(spelling)[1]) is not None
     }
+
+
+def _platforms(discovered: Sequence[Link], canonical_by_spelling: dict[str, str]) -> dict[str, str]:
+    """Best platform string each neighbor was described with, keyed by canonical hostname.
+
+    A device we hold no capture for has no `show version` to read a platform from, but
+    every neighbor that sees it reports one. Those reports are ranked rather than taken
+    first-come: CDP's platform is the chassis model as the device itself advertises it,
+    where LLDP's is an optional inventory TLV many implementations leave empty, so the
+    CDP sighting must win regardless of the order the captures happened to be read in.
+    """
+    best_by_hostname: dict[str, tuple[int, str]] = {}
+    for link in discovered:
+        if not link.remote_platform:
+            continue
+        hostname = canonical_by_spelling[link.remote_device]
+        rank = _discovery_rank(link)
+        current = best_by_hostname.get(hostname)
+        if current is None or rank < current[0]:
+            best_by_hostname[hostname] = (rank, link.remote_platform)
+    return {hostname: platform for hostname, (_, platform) in best_by_hostname.items()}
 
 
 def _discovery_rank(link: Link) -> int:

@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `po_id`/`po_members` columns in `interfaces.csv` are no longer always empty.
 - `DiagramLink.tooltip`, rendered by `render/drawio.py` as the link's draw.io `tooltip`
   attribute.
+- `Device.platform` is now filled in for devices we hold no capture of, from the platform
+  their neighbors report over CDP (`Platform: cisco ISR4331/K9`) or LLDP. That value was
+  already parsed into `Link.remote_platform` and exported in `neighbors.csv`, but only
+  `show version` ever wrote `Device.platform`, so the `platform` column of `devices.csv`
+  was always empty for neighbor-only devices. A source device keeps whatever its own
+  `show version` produced, and CDP outranks LLDP when both describe the same neighbor.
+  `Device.model` is unchanged: it stays a `show version`-only field, since CDP platform
+  strings are not always a hardware model (`VMware ESXi`).
 
 ### Changed
 

@@ -163,7 +163,7 @@ flowchart TD
     G --> H["resolve_device_identities(every reported spelling, known_hostnames)<br/>utils/hostnames.py"]
     subgraph phase3["Phase 3 — canonicalize, register, de-duplicate"]
         H --> I["rewrite Link.remote_device to its canonical name"]
-        I --> J["register the remote Device<br/>(+ role from remote_capabilities, + serial)"]
+        I --> J["register the remote Device<br/>(+ role from remote_capabilities, + serial, + platform)"]
         J --> K["one link per (local device, local port, neighbor)<br/>CDP wins over LLDP"]
         K --> L["de-duplicate by Link.key()<br/>(direction-independent frozenset of both ends)"]
     end
@@ -200,6 +200,23 @@ from the deduplicated list would silently leave whichever device ended up on the
 discarded side at `DeviceRole.UNKNOWN`. A device never described by any neighbor's
 capabilities (e.g. an isolated source device) stays `UNKNOWN` and renders as a plain box
 rather than a guessed icon.
+
+**Why `Device.platform` is backfilled from CDP/LLDP, and only for non-source devices.**
+`Device.platform` normally comes from the device's own `show version`, which a device we
+hold no capture for does not have — yet every neighbor that sees it reports one
+(CDP's `Platform:` line, LLDP's inventory `Model:`), already carried on the `Link` as
+`remote_platform`. Registering a remote device therefore also copies that value, so
+`devices.csv` names the hardware of neighbors as well as of source devices. Two rules
+govern which value wins: a source device keeps whatever its own `show version` produced,
+*including* nothing, since a neighbor's view of it is never more authoritative than its
+own; and among neighbor reports CDP outranks LLDP, because CDP always prints the chassis
+model where LLDP's is an optional TLV many implementations leave empty. The ranking is
+resolved up front, over all raw links (`_platforms()`), rather than first-come inside the
+registration loop — otherwise the answer would depend on the order the captures happened
+to be read in. `Device.model` (the vendor-prefix-stripped form) is deliberately *not*
+derived this way: CDP platform strings are free text and are not always a hardware model
+at all (`VMware ESXi`), so inferring one would put noise in a column that today only ever
+holds a parsed `show version` value.
 
 ### Why interface-name normalization is centralized
 
