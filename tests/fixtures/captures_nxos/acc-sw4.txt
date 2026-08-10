@@ -1,0 +1,43 @@
+acc-sw4#show version
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2020 by Cisco Systems, Inc.
+
+ROM: Bootstrap program is C2960X boot loader
+
+acc-sw4 uptime is 1 week, 4 days, 6 hours, 9 minutes
+System returned to ROM by power-on
+System image file is "flash:/c2960x-universalk9-mz.152-7.E3/c2960x-universalk9-mz.152-7.E3.bin"
+
+
+cisco WS-C2960X-24TS-L (PowerPC405) processor (revision R0) with 524288K bytes of memory.
+Processor board ID FOC2134X0GHI
+Last reset from power-on
+1 Virtual Ethernet interface
+28 Gigabit Ethernet interfaces
+The password-recovery mechanism is enabled.
+
+64K bytes of flash-simulated non-volatile configuration memory.
+Base ethernet MAC Address       : 00:1A:2B:3C:4D:04
+Configuration register is 0xF
+
+acc-sw4#show cdp neighbors detail
+-------------------------
+Device ID: NXOS-CORE1.example.com
+Entry address(es):
+  IP address: 10.0.0.9
+Platform: N9K-C93180YC-EX,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/49,  Port ID (outgoing port): Ethernet1/2
+Holdtime : 148 sec
+
+Version :
+Cisco Nexus Operating System (NX-OS) Software 9.3(10)
+
+advertisement version: 2
+
+Total cdp entries displayed : 1
+
+acc-sw4#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+GigabitEthernet1/0/49  unassigned      YES unset  up                    up

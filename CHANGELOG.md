@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A device reported under different names by CDP and LLDP is no longer split into
+  several nodes. NX-OS advertises its name with the chassis serial appended
+  (`nxos-core1(FDO21120U5D)`, by default as its CDP device id) where the other protocol
+  reports it plain, and either protocol may use an FQDN where the other uses the short
+  name; each spelling used to become its own `Device`, so one switch was drawn several
+  times with parallel links. The new
+  `utils/hostnames.py` correlates every reported spelling before the model is built, and
+  `ingest/model_builder.py` (now a three-phase build, since correlation needs to see all
+  spellings at once) rewrites each discovered link onto the canonical name. Two
+  same-labeled devices in different domains (`sw1.site-a.com`, `sw1.site-b.com`) are
+  deliberately *not* merged.
+- `parsing/lldp.py` no longer reports a neighbor's configured interface description as
+  its interface name. NX-OS puts free text in LLDP's "Port Description" field, which
+  correlated with nothing and left a second, mislabeled edge for every link that CDP had
+  already described. The field that actually looks like an interface name now wins, via
+  the new `looks_like_interface()` in `utils/interfaces.py`.
+- `ingest/model_builder.py` keeps a single link per local port and neighbor, preferring
+  the CDP report over the LLDP one, so a link described by both protocols renders once.
+
+### Added
+
+- `Device.serial`, populated from a source device's own `show version` or recovered from
+  the serial an NX-OS neighbor advertises inside its name, and exported as a new column
+  in `devices.csv`.
+
 ## [0.2.0] - 2026-08-07
 
 Phase 4: STP.

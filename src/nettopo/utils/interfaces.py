@@ -33,6 +33,29 @@ _LONG_FORMS_BY_LENGTH: tuple[str, ...] = tuple(
 )
 _CANONICAL_BY_LENGTH: tuple[str, ...] = tuple(sorted(_CANONICAL_FORMS, key=len, reverse=True))
 
+# Every spelling an interface type can start with, lowercased, for `looks_like_interface`.
+_INTERFACE_PREFIXES: tuple[str, ...] = (
+    *_LONG_FORMS_BY_LENGTH,
+    *(canonical.lower() for canonical in _CANONICAL_BY_LENGTH),
+)
+
+
+def looks_like_interface(name: str) -> bool:
+    """Whether `name` is a recognized interface type immediately followed by a number.
+
+    Lets a parser tell an interface name from free text when a device offers both in the
+    same field -- LLDP's "Port Description" carries the neighbor's configured interface
+    description on NX-OS, not its port name. `normalize()` cannot answer this: it returns
+    unrecognized input unchanged, which is indistinguishable from an already-canonical
+    name. The trailing-digit requirement is what separates `Po1` from prose that merely
+    starts the same way (`Port 1`, `long-haul uplink`).
+    """
+    lowered = name.lower()
+    for prefix in _INTERFACE_PREFIXES:
+        if lowered.startswith(prefix) and lowered[len(prefix) : len(prefix) + 1].isdigit():
+            return True
+    return False
+
 
 def normalize(name: str) -> str:
     """Normalize an interface name to its short canonical form.

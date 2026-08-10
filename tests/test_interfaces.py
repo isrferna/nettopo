@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from nettopo.utils.interfaces import normalize
+from nettopo.utils.interfaces import looks_like_interface, normalize
 
 # Long-form input -> expected canonical output, one row per PROJECT_SPEC.md section 5.
 LONG_FORM_CASES = [
@@ -87,6 +87,31 @@ def test_idempotent(raw: str) -> None:
 
 def test_unrecognized_interface_type_is_returned_unchanged() -> None:
     assert normalize("Async0") == "Async0"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [raw for raw, _ in LONG_FORM_CASES]
+    + ALREADY_ABBREVIATED_CASES
+    + [raw for raw, _ in MIXED_CASE_CASES],
+)
+def test_every_recognized_interface_name_looks_like_one(raw: str) -> None:
+    assert looks_like_interface(raw) is True
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "uplink-to-acc-sw3",  # an NX-OS LLDP "Port Description"
+        "Port 1",  # an IP phone's port id -- shares a prefix with Port-channel
+        "long-haul uplink",  # shares a prefix with Loopback
+        "vmnic0",  # a VMware uplink
+        "0050.568a.1234",
+        "",
+    ],
+)
+def test_free_text_does_not_look_like_an_interface(raw: str) -> None:
+    assert looks_like_interface(raw) is False
 
 
 def test_does_not_mutate_numeric_suffix() -> None:

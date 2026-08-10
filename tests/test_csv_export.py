@@ -27,7 +27,9 @@ def _read_rows(path: Path) -> list[dict[str, str]]:
 
 def _sample_model() -> NetworkModel:
     model = NetworkModel()
-    device = Device(hostname="sw1", is_source=True, platform="cisco C9300", os="ios")
+    device = Device(
+        hostname="sw1", is_source=True, platform="cisco C9300", os="ios", serial="FOC2134X0ABC"
+    )
     device.interfaces["Gi1/0/1"] = Interface(name="Gi1/0/1", description="=cmd|calc")
     model.devices["sw1"] = device
     model.devices["sw2"] = Device(hostname="sw2")
@@ -65,6 +67,7 @@ def test_devices_csv_has_one_row_per_device(tmp_path: Path) -> None:
     sw1 = next(row for row in rows if row["hostname"] == "sw1")
     assert sw1["is_source"] == "True"
     assert sw1["os"] == "ios"
+    assert sw1["serial"] == "FOC2134X0ABC"
 
 
 def test_neighbors_csv_joins_capabilities_with_semicolons(tmp_path: Path) -> None:

@@ -6,11 +6,13 @@ from pathlib import Path
 
 from nettopo.parsing.lldp import parse_lldp
 
-FIXTURE = Path(__file__).parent / "fixtures" / "lldp" / "show_lldp_neighbors_detail.txt"
+FIXTURES = Path(__file__).parent / "fixtures" / "lldp"
+FIXTURE = FIXTURES / "show_lldp_neighbors_detail.txt"
+NXOS_NEIGHBOR_FIXTURE = FIXTURES / "show_lldp_neighbors_detail_nxos_neighbor.txt"
 
 
-def _capture() -> str:
-    return f"sw1-access#show lldp neighbors detail\n{FIXTURE.read_text()}"
+def _capture(fixture: Path = FIXTURE) -> str:
+    return f"sw1-access#show lldp neighbors detail\n{fixture.read_text()}"
 
 
 def test_parse_lldp_returns_one_link() -> None:
@@ -26,6 +28,14 @@ def test_parse_lldp_prefers_port_description_and_normalizes_names() -> None:
     assert link.remote_interface == "Gi1/0/1"
     assert link.discovery == "lldp"
     assert link.remote_capabilities == ["B", "R"]
+
+
+def test_parse_lldp_falls_back_to_port_id_when_the_description_is_free_text() -> None:
+    # NX-OS advertises the port's configured description, not its name, so the port id
+    # is the only field that correlates with what CDP reports for the same link.
+    (link,) = parse_lldp("acc-sw3", _capture(NXOS_NEIGHBOR_FIXTURE))
+    assert link.remote_interface == "Eth1/1"
+    assert link.remote_device == "nxos-core1"
 
 
 def test_parse_lldp_returns_empty_list_when_command_absent() -> None:
