@@ -1,0 +1,102 @@
+acc-sw3#show version
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2020 by Cisco Systems, Inc.
+
+ROM: Bootstrap program is C2960X boot loader
+
+acc-sw3 uptime is 1 week, 4 days, 6 hours, 11 minutes
+System returned to ROM by power-on
+System image file is "flash:/c2960x-universalk9-mz.152-7.E3/c2960x-universalk9-mz.152-7.E3.bin"
+
+
+cisco WS-C2960X-24TS-L (PowerPC405) processor (revision R0) with 524288K bytes of memory.
+Processor board ID FOC2134X0DEF
+Last reset from power-on
+1 Virtual Ethernet interface
+28 Gigabit Ethernet interfaces
+The password-recovery mechanism is enabled.
+
+64K bytes of flash-simulated non-volatile configuration memory.
+Base ethernet MAC Address       : 00:1A:2B:3C:4D:03
+Configuration register is 0xF
+
+acc-sw3#show cdp neighbors detail
+-------------------------
+Device ID: nxos-core1(FDO21120U5D)
+Entry address(es):
+  IP address: 10.0.0.9
+Platform: N9K-C93180YC-EX,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/49,  Port ID (outgoing port): Ethernet1/1
+Holdtime : 151 sec
+
+Version :
+Cisco Nexus Operating System (NX-OS) Software 9.3(10)
+
+advertisement version: 2
+
+-------------------------
+Device ID: esxi-host03
+Entry address(es):
+  IP address: 10.0.0.53
+Platform: VMware ESXi,  Capabilities: Host
+Interface: GigabitEthernet1/0/5,  Port ID (outgoing port): vmnic0
+Holdtime : 142 sec
+
+Version :
+VMware ESXi 8.0.2
+
+advertisement version: 2
+
+Total cdp entries displayed : 2
+
+acc-sw3#show lldp neighbors detail
+------------------------------------------------
+Local Intf: Gi1/0/49
+Chassis id: 00de.fb12.3456
+Port id: Eth1/1
+Port Description: uplink-to-acc-sw3
+System Name: nxos-core1
+
+System Description:
+Cisco Nexus Operating System (NX-OS) Software 9.3(10)
+
+Time remaining: 101 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Addresses:
+    IP: 10.0.0.9
+Auto Negotiation - not supported
+Physical media capabilities:
+    Other/unknown
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+------------------------------------------------
+Local Intf: Gi1/0/5
+Chassis id: 0050.568a.1234
+Port id: vmnic0
+Port Description: vmnic0
+System Name: esxi-host03.example.com
+
+System Description:
+VMware ESXi 8.0.2
+
+Time remaining: 96 seconds
+System Capabilities: S
+Enabled Capabilities: S
+Management Addresses:
+    IP: 10.0.0.53
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 2
+
+acc-sw3#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+GigabitEthernet1/0/5   unassigned      YES unset  up                    up
+GigabitEthernet1/0/49  unassigned      YES unset  up                    up

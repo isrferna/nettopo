@@ -90,10 +90,17 @@ localize the fault to parsing vs. rendering.
 nettopo parse -i ./captures -o ./output
 ```
 
-Writes `output/csv/devices.csv`, `interfaces.csv`, `neighbors.csv`, `vlans.csv`,
-`stp.csv` (base *and* effective bridge priority — see
+Writes `output/csv/devices.csv` (including each device's serial, from its own
+`show version` or from the name a Nexus neighbor advertises), `interfaces.csv`,
+`neighbors.csv`, `vlans.csv`, `stp.csv` (base *and* effective bridge priority — see
 [PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), and header-only `hsrp.csv`/`bgp.csv`
 until Phases 5–6 add those parsers.
+
+One row per device and per adjacency, regardless of how many names its neighbors use for
+it: CDP and LLDP disagree constantly (`nxos-core1` vs `nxos-core1(FDO21120U5D)` vs
+`nxos-core1.example.com`), and those spellings are correlated into one device before the
+model is built — see
+[PROJECT_SPEC.md §5.2](PROJECT_SPEC.md#5-normalization-central-services).
 
 ### `nettopo l2`
 

@@ -85,6 +85,7 @@ class Device:
     platform: str | None = None  # raw: "cisco C9300-48P"
     model: str | None = None  # parsed: "C9300-48P"
     os: str | None = None  # "ios" | "ios-xe" | "nxos"
+    serial: str | None = None  # own `show version`, or the suffix NX-OS advertises
     role: DeviceRole = DeviceRole.UNKNOWN
     mgmt_ip: str | None = None
     asn: int | None = None  # for BGP
