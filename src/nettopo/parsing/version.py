@@ -22,6 +22,7 @@ class VersionInfo:
     platform: str | None  # raw: "cisco C9300-24P"
     model: str | None  # parsed: "C9300-24P"
     os: str | None  # "ios" | "ios-xe" | "nxos"
+    serial: str | None  # chassis serial, when the platform prints one
 
 
 def parse_version(raw_text: str, *, platform: str = "cisco_ios") -> VersionInfo | None:
@@ -35,7 +36,10 @@ def parse_version(raw_text: str, *, platform: str = "cisco_ios") -> VersionInfo 
         return None
 
     record = records[0]
-    hardware = record.get("hardware") or []
+    # HARDWARE and SERIAL are `List`-typed in the template: one entry per stack member.
+    # The first is the master, which is the chassis this capture speaks for.
+    hardware: list[str] = record.get("hardware") or []
+    serials: list[str] = record.get("serial") or []
     model = hardware[0] if hardware else None
 
     return VersionInfo(
@@ -43,6 +47,7 @@ def parse_version(raw_text: str, *, platform: str = "cisco_ios") -> VersionInfo 
         platform=f"cisco {model}" if model else None,
         model=model,
         os=_detect_os(output),
+        serial=serials[0] if serials else None,
     )
 
 

@@ -7,17 +7,13 @@ import re
 from nettopo.model.entities import Link
 from nettopo.parsing._textfsm import run_template
 from nettopo.utils.command_sections import extract_command_output
-from nettopo.utils.interfaces import normalize
+from nettopo.utils.interfaces import looks_like_interface, normalize
 
 _COMMAND_PATTERN = re.compile(r"show\s+lldp\s+neigh\w*\s+det\w*\s*$", re.IGNORECASE)
 
 
 def parse_lldp(local_device: str, raw_text: str, *, platform: str = "cisco_ios") -> list[Link]:
-    """Parse `local_device`'s LLDP neighbors into `Link`s, local end first.
-
-    Prefers the neighbor's port description (usually the long interface name) over its
-    port id (sometimes a MAC address or an already-short name) when both are present.
-    """
+    """Parse `local_device`'s LLDP neighbors into `Link`s, local end first."""
     output = extract_command_output(raw_text, _COMMAND_PATTERN)
     if not output:
         return []
@@ -27,9 +23,9 @@ def parse_lldp(local_device: str, raw_text: str, *, platform: str = "cisco_ios")
     for record in records:
         neighbor_name = record.get("neighbor_name", "").strip()
         local_interface = record.get("local_interface", "").strip()
-        neighbor_interface = (
-            record.get("neighbor_interface", "").strip()
-            or record.get("neighbor_port_id", "").strip()
+        neighbor_interface = _neighbor_interface(
+            description=record.get("neighbor_interface", "").strip(),
+            port_id=record.get("neighbor_port_id", "").strip(),
         )
         if not (neighbor_name and local_interface and neighbor_interface):
             continue
@@ -46,3 +42,20 @@ def parse_lldp(local_device: str, raw_text: str, *, platform: str = "cisco_ios")
             )
         )
     return links
+
+
+def _neighbor_interface(*, description: str, port_id: str) -> str:
+    """Pick whichever LLDP field actually names the neighbor's port.
+
+    IOS reports the port name in "Port Description" and often a MAC address or an
+    already-short name in "Port id", so the description is preferred. NX-OS instead puts
+    the port's *configured description* ("uplink-to-acc-sw1") there, which correlates
+    with nothing: the same physical link then reads differently in CDP and LLDP and
+    survives de-duplication as a second, bogus edge. Whichever field looks like an
+    interface name wins; the description keeps its historical precedence otherwise.
+    """
+    if looks_like_interface(description):
+        return description
+    if looks_like_interface(port_id):
+        return port_id
+    return description or port_id

@@ -36,7 +36,7 @@ flowchart LR
     render --> model
     export["export/<br/>csv_export"] --> views
     export --> model
-    model --> utils["utils/<br/>interfaces, command_sections, paths"]
+    model --> utils["utils/<br/>interfaces, hostnames, command_sections, paths"]
     parsing --> utils
     cli["cli.py<br/>argument parsing + orchestration only"] -. orchestrates .-> ingest
     cli -. orchestrates .-> parsing
@@ -53,7 +53,7 @@ flowchart LR
 | `views/` | One module per diagram (`l2`, `stp`; `hsrp`/`bgp` pending). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. |
 | `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco stencil), `lucidify.py` (Lucidchart-import post-process). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
-| `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
+| `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
 | `cli.py` | `argparse` setup and per-command orchestration only — no parsing or rendering logic lives here. |
 
 ### Layering rule (Dependency Inversion)
@@ -78,7 +78,7 @@ into parsing or modeling code.
 ## End-to-end call flow
 
 `nettopo stp -i captures --all --group-mode topology` exercises every stage of the
-pipeline (ingestion, two-pass model building, grouping, rendering), so it is used here
+pipeline (ingestion, three-phase model building, grouping, rendering), so it is used here
 as the representative example. `nettopo l2` and `nettopo parse` follow the same shape
 minus the grouping step.
 
@@ -89,6 +89,7 @@ sequenceDiagram
     participant FDS as FileDataSource
     participant MB as "model_builder.build_network_model()"
     participant P as "parsing.* functions"
+    participant HN as "hostnames.resolve_device_identities()"
     participant STP as "views.stp.build_groups()"
     participant GRP as "grouping.stp_fingerprint()"
     participant DIO as "render.drawio.render_diagram()"
@@ -99,14 +100,17 @@ sequenceDiagram
     CLI->>FDS: discover()
     FDS-->>CLI: Capture(device_hint, raw_text, platform_hint) x N
     CLI->>MB: build_network_model(source)
-    loop pass 1: each capture
+    loop phase 1: each capture
         MB->>P: parse_version / parse_interfaces / parse_vlans / parse_spanning_tree
         P-->>MB: Device fields, Vlan, StpVlanCapture
     end
-    loop pass 2: each capture
+    loop phase 2: each capture
         MB->>P: parse_cdp / parse_lldp
         P-->>MB: raw Link objects
     end
+    MB->>HN: every reported neighbor spelling + source hostnames
+    HN-->>MB: spelling -> canonical name
+    Note over MB: phase 3: canonicalize remote_device, register devices,<br/>collapse CDP/LLDP duplicates, de-duplicate by Link.key()
     MB-->>CLI: NetworkModel
     CLI->>STP: build_groups(model, group_mode=TOPOLOGY)
     loop each StpVlan in model.stp
@@ -136,52 +140,61 @@ reading a directory of saved captures. v1 ships file-based ingestion only (see
 future live-collection source (netmiko/scrapli over SSH) can be added by implementing
 the same interface, without touching `parsing/`, `model/`, or `views/`.
 
-### Two-pass model building
+### Three-phase model building
 
 `ingest/model_builder.py`'s `build_network_model()` cannot resolve neighbor identities
-in a single pass: it needs to know *every* source device's canonical hostname before it
-can tell whether a CDP/LLDP-reported neighbor is one of those devices under a different
-spelling, or a genuinely new one. It runs a first pass over every capture (registering
-devices, interfaces, VLANs, and STP data) before a second pass that discovers links.
+while it discovers them. Deciding what to call a neighbor needs two things that are only
+complete once *every* capture has been read: the set of source-device hostnames, and the
+set of all spellings that neighbor was reported under. So the build registers source
+devices first, then collects raw links, then resolves identities and writes the links
+into the model.
 
 ```mermaid
 flowchart TD
-    subgraph pass1["Pass 1 — establish every source device's canonical identity"]
-        A["for each capture"] --> B["parse_version() -> hostname, platform, os"]
+    subgraph phase1["Phase 1 — establish every source device's canonical identity"]
+        A["for each capture"] --> B["parse_version() -> hostname, platform, os, serial"]
         B --> C["model.devices[hostname] = Device(is_source=True)"]
         C --> D["parse_interfaces / parse_vlans / parse_spanning_tree<br/>populate that device + model.vlans + model.stp"]
     end
-    pass1 --> E["known_hostnames = set(model.devices)"]
-    subgraph pass2["Pass 2 — discover links, resolve neighbor identity"]
+    phase1 --> E["known_hostnames = set(model.devices)"]
+    subgraph phase2["Phase 2 — discover links, neighbor names still as reported"]
         E --> F["for each capture"] --> G["parse_cdp + parse_lldp -> raw Link objects"]
-        G --> H{"remote_device in<br/>known_hostnames?"}
-        H -- yes --> I["keep remote_device as-is"]
-        H -- "no, but short name matches<br/>(sw2-dist.example.com -> sw2-dist)" --> J["resolve to the known short hostname"]
-        H -- "no match" --> K["keep as a new, non-source Device"]
-        I --> L["infer Device.role from remote_capabilities<br/>(Router / Switch / Phone / Host)"]
-        J --> L
-        K --> L
-        L --> M["de-duplicate by Link.key()<br/>(direction-independent frozenset of both ends)"]
     end
-    M --> N["model.links"]
+    G --> H["resolve_device_identities(every reported spelling, known_hostnames)<br/>utils/hostnames.py"]
+    subgraph phase3["Phase 3 — canonicalize, register, de-duplicate"]
+        H --> I["rewrite Link.remote_device to its canonical name"]
+        I --> J["register the remote Device<br/>(+ role from remote_capabilities, + serial)"]
+        J --> K["one link per (local device, local port, neighbor)<br/>CDP wins over LLDP"]
+        K --> L["de-duplicate by Link.key()<br/>(direction-independent frozenset of both ends)"]
+    end
+    L --> M["model.links"]
 ```
 
-**Why CDP/LLDP neighbor names are resolved against known hostnames.** CDP/LLDP
-frequently report a neighbor by its fully-qualified domain name (e.g.
-`sw2-dist.example.com`) even when that same device's own capture identifies it by its
-short hostname (`sw2-dist`, from `show version`). Left unresolved, every link between
-two source devices would create a duplicate, non-source `Device` for the FQDN spelling,
-splitting one device into two in the model. A neighbor that matches no known source
-hostname (e.g. `core-rtr`, seen only in CDP output) is kept as a non-source `Device`
-under its reported name — it may still get a role (see next) even though it's never a
-source device.
+**Why neighbor names are resolved instead of used as-is.** CDP and LLDP disagree about
+what a device is called: the same Nexus is `nxos-core1` in one protocol's output and
+`nxos-core1(FDO21120U5D)` in the other's, and a device's FQDN
+(`sw2-dist.example.com`) routinely appears where its own capture says `sw2-dist`. Each
+uncorrelated spelling becomes its own non-source `Device`, so one switch is drawn as
+several nodes with parallel links. `utils/hostnames.py` owns the correlation rules
+(`PROJECT_SPEC.md` §5.2); a neighbor whose spelling correlates with nothing else (e.g.
+`core-rtr.example.com`, seen only in CDP output) is kept as a non-source `Device` under
+the name it was reported by — it may still get a role (see below) even though it's never
+a source device.
+
+**Why one link is kept per local port and neighbor.** Both protocols describe the same
+adjacency, and they do not always describe it identically: `Link.key()` alone cannot
+collapse them when LLDP names the neighbor's port differently from CDP. Keeping one link
+per `(local device, local port, neighbor)` — CDP first, since it names Cisco ports more
+reliably — removes that second edge without touching genuinely distinct adjacencies: a
+phone and a PC on one access port are different neighbors, and two links to the same
+neighbor leave from different local ports.
 
 **Why `Device.role` is inferred from neighbor capabilities, not self-reported.**
 `render/icons.py` maps `DeviceRole` to a Cisco icon, but a device's own CDP/LLDP output
 never reports its own capabilities — so role is inferred from how *other* devices'
 CDP/LLDP describe it (`Capabilities: Router` / `Switch` / `Phone` / `Host`). This
-inference is applied the moment each raw link is discovered (step L above), before the
-two directions of a source-to-source link are deduplicated into one `Link` (step M):
+inference is applied to every raw link as it is registered (step J above), before the
+two directions of a source-to-source link are deduplicated into one `Link` (step L):
 deduplication keeps only one direction's `remote_capabilities`, so inferring role only
 from the deduplicated list would silently leave whichever device ended up on the
 discarded side at `DeviceRole.UNKNOWN`. A device never described by any neighbor's
@@ -195,7 +208,18 @@ The same physical port can appear as `Gi1/0/1` in one `show` command's output an
 correlation across commands (and across devices) would silently fail. `utils/interfaces.py`
 is the single source of truth for this normalization; every parser routes interface
 names through it before the name is stored anywhere in the model. See `PROJECT_SPEC.md`
-section 5 for the canonical abbreviation table.
+§5.1 for the canonical abbreviation table.
+
+### Why device-name normalization is centralized
+
+Device names have the same problem one level up, with worse consequences: a mismatched
+interface name splits one port, a mismatched device name splits an entire node and every
+link attached to it. `utils/hostnames.py` is the single source of truth here, and unlike
+interface names it is applied in `ingest/model_builder.py` rather than in the parsers —
+correlating spellings requires seeing all of them at once, which no individual parser
+does. Parsers therefore report neighbor names exactly as the device printed them.
+`PROJECT_SPEC.md` §5.2 has the resolution rules; the important property is that a
+canonical name is always one of the observed spellings, never a constructed one.
 
 ## Parsing layer
 
@@ -207,11 +231,11 @@ command matches a pattern and returns just that command's output slice.
 
 | `show` command | Parser | Technique | Populates |
 |---|---|---|---|
-| `show version` | `parsing/version.py` | ntc-templates | hostname, `Device.platform/model/os` |
+| `show version` | `parsing/version.py` | ntc-templates | hostname, `Device.platform/model/os/serial` |
 | `show ip interface brief`, `show interfaces` | `parsing/interfaces.py` | ntc-templates | `Device.interfaces` |
 | `show vlan brief` | `parsing/vlan.py` | ntc-templates | `NetworkModel.vlans` |
 | `show cdp neighbors detail` | `parsing/cdp.py` | ntc-templates | raw `Link`s (`discovery="cdp"`) |
-| `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`) |
+| `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`, see below) |
 | `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) |
 | `show standby brief` | `parsing/hsrp.py` | not yet implemented | — (Phase 5) |
 | `show ip bgp summary` | `parsing/bgp.py` | not yet implemented | — (Phase 6) |
@@ -219,6 +243,18 @@ command matches a pattern and returns just that command's output slice.
 All ntc-templates-backed parsers go through `parsing/_textfsm.py`, a thin typed wrapper
 around `ntc_templates.parse_output` — the one place the untyped `ntc_templates` import
 boundary exists.
+
+### Which LLDP field names the neighbor's port
+
+LLDP offers two candidates for the remote interface and neither is reliable on its own.
+IOS puts the port's name in "Port Description" and often a MAC address in "Port id";
+NX-OS puts the port's *configured description* ("uplink-to-acc-sw3") in "Port
+Description", which correlates with nothing — CDP and LLDP then describe the same
+physical link differently and it survives de-duplication as a second, bogus edge.
+`parsing/lldp.py` picks whichever field `utils/interfaces.py`'s `looks_like_interface()`
+recognizes (an interface type immediately followed by a number), preferring the
+description when both qualify, and falls back to the description when neither does — a
+non-Cisco port name like `vmnic0` is still better than nothing.
 
 ### Why `spanning_tree.py` doesn't use ntc-templates
 

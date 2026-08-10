@@ -4,6 +4,13 @@ Uses `tests/fixtures/captures/`: two source devices (`sw1-access`, IOS; `sw2-dis
 IOS-XE) that are CDP/LLDP neighbors of each other and of a third, non-source device
 (`core-rtr`) that only appears in CDP output. Both source devices also carry VLAN 10
 `show spanning-tree` output (`sw2-dist` as root) for the STP wiring tests below.
+
+`tests/fixtures/captures_nxos/` is a separate directory for neighbor identity
+resolution. One Nexus is uplinked to two access switches and named differently by each
+report: `acc-sw3` sees it as `nxos-core1(FDO21120U5D)` over CDP (NX-OS appends the
+chassis serial to its device id) and as plain `nxos-core1` over LLDP, while `acc-sw4`
+sees it as `NXOS-CORE1.example.com`. `acc-sw3` likewise sees one host as `esxi-host03`
+over CDP and `esxi-host03.example.com` over LLDP.
 """
 
 from __future__ import annotations
@@ -15,10 +22,15 @@ from nettopo.ingest.model_builder import build_network_model
 from nettopo.model.entities import DeviceRole, NetworkModel
 
 FIXTURES = Path(__file__).parent / "fixtures" / "captures"
+NXOS_FIXTURES = Path(__file__).parent / "fixtures" / "captures_nxos"
 
 
 def _build_model() -> NetworkModel:
     return build_network_model(FileDataSource(FIXTURES))
+
+
+def _build_nxos_model() -> NetworkModel:
+    return build_network_model(FileDataSource(NXOS_FIXTURES))
 
 
 def test_every_source_device_is_registered_and_marked_as_source() -> None:
@@ -97,3 +109,51 @@ def test_both_ends_of_a_source_to_source_link_get_a_role() -> None:
     model = _build_model()
     assert model.devices["sw1-access"].role is DeviceRole.SWITCH
     assert model.devices["sw2-dist"].role is DeviceRole.SWITCH
+
+
+def test_source_device_serial_comes_from_its_own_show_version() -> None:
+    model = _build_model()
+    assert model.devices["sw1-access"].serial == "FOC2134X0ABC"
+
+
+def test_a_neighbor_named_with_and_without_its_serial_is_one_device() -> None:
+    model = _build_nxos_model()
+    assert set(model.devices) == {"acc-sw3", "acc-sw4", "nxos-core1", "esxi-host03"}
+
+
+def test_one_neighbor_named_differently_by_two_switches_keeps_both_of_its_links() -> None:
+    # Merging the spellings must not merge the adjacencies: the Nexus has one uplink to
+    # each access switch, out of a different port on each side.
+    model = _build_nxos_model()
+    uplinks = {
+        (link.local_device, link.local_interface, link.remote_interface)
+        for link in model.links
+        if link.remote_device == "nxos-core1"
+    }
+    assert uplinks == {
+        ("acc-sw3", "Gi1/0/49", "Eth1/1"),
+        ("acc-sw4", "Gi1/0/49", "Eth1/2"),
+    }
+
+
+def test_the_serial_a_neighbor_advertises_in_its_name_is_kept_as_data() -> None:
+    model = _build_nxos_model()
+    assert model.devices["nxos-core1"].serial == "FDO21120U5D"
+
+
+def test_cdp_and_lldp_reporting_one_adjacency_produce_a_single_link() -> None:
+    model = _build_nxos_model()
+    (uplink,) = [
+        link
+        for link in model.links
+        if link.local_device == "acc-sw3" and link.remote_device == "nxos-core1"
+    ]
+    assert uplink.local_interface == "Gi1/0/49"
+    assert uplink.remote_interface == "Eth1/1"
+    assert uplink.discovery == "cdp"
+
+
+def test_a_non_source_neighbor_seen_short_and_as_an_fqdn_is_one_device() -> None:
+    model = _build_nxos_model()
+    assert "esxi-host03.example.com" not in model.devices
+    assert model.devices["esxi-host03"].role is DeviceRole.HOST

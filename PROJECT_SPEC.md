@@ -87,7 +87,8 @@ nettopo/
 │       ├── ingest/            # data sources (file reader now; live later)
 │       │   ├── __init__.py
 │       │   ├── base.py        # DataSource interface
-│       │   └── files.py       # FileDataSource: read a directory of device captures
+│       │   ├── files.py       # FileDataSource: read a directory of device captures
+│       │   └── model_builder.py  # ingestion -> parsers -> NetworkModel population
 │       ├── parsing/           # one parser per show command (TextFSM/ntc-templates)
 │       │   ├── __init__.py
 │       │   ├── cdp.py
@@ -118,7 +119,10 @@ nettopo/
 │       │   └── csv_export.py
 │       └── utils/
 │           ├── __init__.py
-│           └── interfaces.py  # THE interface-name normalizer (central service)
+│           ├── command_sections.py  # split a capture into per-command output slices
+│           ├── hostnames.py   # THE device-name normalizer (central service)
+│           ├── interfaces.py  # THE interface-name normalizer (central service)
+│           └── paths.py       # output-path resolution and filename sanitization
 └── tests/
     ├── fixtures/              # anonymized real captures used as parser inputs
     ├── test_interfaces.py
@@ -164,7 +168,13 @@ Input is a **directory**. Each file is one device's captured output containing s
 
 ---
 
-## 5. Interface normalization (central service)
+## 5. Normalization (central services)
+
+Two identities have to survive being spelled differently by different commands and
+different devices: the **interface name** and the **device name**. Each gets exactly one
+normalizer in `utils/`, and nothing else may reimplement either.
+
+### 5.1 Interface names — `utils/interfaces.py`
 
 `utils/interfaces.py` is the single source of truth for interface-name normalization and
 **every parser must route names through it**. This prevents silent correlation failures
@@ -190,6 +200,33 @@ where the same physical port appears as `Gi1/0/1` in one command and
 
 The normalizer must be pure, deterministic, idempotent (`normalize(normalize(x)) == normalize(x)`),
 and covered by exhaustive unit tests including already-abbreviated inputs and mixed casing.
+
+`looks_like_interface()` lives here too: it answers whether a string is a recognized
+interface type followed by a number, which is how `parsing/lldp.py` decides between the
+neighbor's "Port Description" and its "Port id" (see §5.2 for why that matters).
+
+### 5.2 Device names — `utils/hostnames.py`
+
+CDP and LLDP rarely agree on a neighbor's name. The same device is reported as
+`nxos-core1`, as `nxos-core1(FDO21120U5D)` (NX-OS appends the chassis serial to the name
+it advertises), and as `nxos-core1.example.com`. Every spelling that is not correlated
+becomes its own `Device`, so one physical switch is drawn as several nodes joined by
+parallel links. `utils/hostnames.py` is the single source of truth for that correlation;
+`ingest/model_builder.py` routes every CDP/LLDP-reported name through it.
+
+**Rules**, applied to all spellings sharing one short label (the text before the first
+dot, case-folded, serial suffix removed):
+
+1. a hostname belonging to a **source device** wins — the rest of the model is already
+   keyed by what that device's own `show version` reported;
+2. otherwise, if a bare (domainless) spelling or exactly one domain was observed, the
+   spellings are one device, named by the **shortest** observed spelling;
+3. otherwise (two or more domains, no bare spelling, no source device) they stay
+   separate: `sw1.site-a.com` and `sw1.site-b.com` are presumed to be two devices.
+
+The resolver never invents a name — a canonical name is always an observed spelling
+minus its serial suffix — so a device only ever seen by its FQDN keeps that FQDN. The
+serial the suffix carried is preserved as `Device.serial` rather than discarded.
 
 ---
 
@@ -257,6 +294,7 @@ class Device:
     platform: str | None = None            # raw: "cisco C9300-48P"
     model: str | None = None               # parsed: "C9300-48P"
     os: str | None = None                  # "ios" | "ios-xe" | "nxos"
+    serial: str | None = None              # own `show version`, or the NX-OS name suffix
     role: DeviceRole = DeviceRole.UNKNOWN
     mgmt_ip: str | None = None
     asn: int | None = None                 # for BGP

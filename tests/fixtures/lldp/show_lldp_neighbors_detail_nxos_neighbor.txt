@@ -1,0 +1,21 @@
+Local Intf: Gi1/0/49
+Chassis id: 00de.fb12.3456
+Port id: Eth1/1
+Port Description: uplink-to-acc-sw3
+System Name: nxos-core1
+
+System Description:
+Cisco Nexus Operating System (NX-OS) Software 9.3(10)
+
+Time remaining: 101 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Addresses:
+    IP: 10.0.0.9
+Auto Negotiation - not supported
+Physical media capabilities:
+    Other/unknown
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 1

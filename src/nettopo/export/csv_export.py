@@ -62,7 +62,17 @@ def write_csv_tables(model: NetworkModel, output_root: Path) -> Path:
 
 
 def _write_devices(path: Path, model: NetworkModel) -> None:
-    header = ("hostname", "is_source", "platform", "model", "os", "role", "mgmt_ip", "asn")
+    header = (
+        "hostname",
+        "is_source",
+        "platform",
+        "model",
+        "os",
+        "serial",
+        "role",
+        "mgmt_ip",
+        "asn",
+    )
     rows = [
         (
             device.hostname,
@@ -70,6 +80,7 @@ def _write_devices(path: Path, model: NetworkModel) -> None:
             device.platform,
             device.model,
             device.os,
+            device.serial,
             device.role.value,
             device.mgmt_ip,
             device.asn,
