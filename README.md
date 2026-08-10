@@ -58,7 +58,7 @@ Requires Python 3.11+.
 ## Usage
 
 ```
-nettopo [--log-level LEVEL] <command> [options]
+nettopo [--version] [--log-level LEVEL] <command> [options]
 ```
 
 Every command reads a **directory** of saved capture files (see
@@ -67,10 +67,11 @@ creating it if needed. `parse`, `l2`, and `stp` are implemented; `hsrp`, `bgp`, 
 are scaffolded but not yet implemented (running them prints `'<command>' is not
 implemented yet.` and exits with status 1 — see [Status](#status)).
 
-### Global option
+### Global options
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
+| `--version` | flag | — | Print the installed version and exit, without a subcommand: `nettopo --version`. Read from the installed distribution's metadata, so after bumping `pyproject.toml` re-run `pip install -e .` for it to catch up. |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `INFO` | Logging verbosity. Goes before the subcommand: `nettopo --log-level DEBUG l2 -i ./captures`. |
 
 ### Options common to every command
@@ -146,8 +147,33 @@ priority (base priority is in `stp.csv`).
 Needs `show spanning-tree` **and** a neighbor-discovery command (`show cdp neighbors
 detail` / `show lldp neighbors detail`) in the captures: spanning-tree output alone never
 says who is on the other end of a port, so without CDP/LLDP the diagram has nodes and no
-links. See [Which commands each subcommand
+links. If the switches are joined by **port-channels**, `show etherchannel summary`
+(IOS/IOS-XE) or `show port-channel summary` (NX-OS) is required as well — spanning-tree
+names the bundle (`Po1`) while CDP/LLDP name its members (`Gi1/0/1`), and only the bundle
+table connects the two. See [Which commands each subcommand
 needs](#which-commands-each-subcommand-needs).
+
+Each port-channel is drawn as a single link labeled with the bundle name, with the member
+interfaces in the link's hover tooltip: spanning-tree treats a bundle as one logical port,
+so drawing one line per member would misrepresent it.
+
+Switches that appear only in a neighbor's CDP/LLDP output — no capture of their own — are
+included with a **dashed border** and labeled with their name alone, since there is no
+bridge data to show for them. They are reached only through ports that are *not*
+Edge/PortFast, which is what keeps phones, access points and servers out of a
+spanning-tree diagram.
+
+If the root bridge is one of those uncaptured switches, it is highlighted only when an
+LLDP chassis address matches the root address exactly. Without a match the run logs a
+warning naming the root's MAC and highlights nothing, rather than guessing.
+
+A diagram with several nodes and no links is always reported as a warning. To see why each
+individual link was dropped, raise the log level — note that `--log-level` is a global
+option, so it goes *before* the subcommand:
+
+```bash
+nettopo --log-level DEBUG stp -i ./captures --all
+```
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
@@ -196,7 +222,7 @@ is what each subcommand needs to produce a *complete* result.
 |---|---|---|
 | `parse` | — | every command in the next table; each fills its own CSV table or columns |
 | `l2` | `show cdp neighbors detail` and/or `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (only for `--link-mode port-channel`) |
-| `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) |
+| `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (**required** when links are bundled) · `show lldp neighbors detail` (to identify a root bridge outside the captures) |
 | `hsrp` | `show standby brief` — *not yet implemented (Phase 5)* | |
 | `bgp` | `show ip bgp summary` — *not yet implemented (Phase 6)* | |
 
@@ -205,6 +231,13 @@ is what each subcommand needs to produce a *complete* result.
 > yields nodes and no edges. The STP view draws its links from the CDP/LLDP topology and
 > labels each end with the spanning-tree state found there, so without a neighbor
 > discovery command you get a diagram of disconnected boxes.
+>
+> **`stp` needs the bundle table when links are bundled.** The join between the two
+> sources above is the interface name, and for a port-channel the two sources disagree:
+> spanning-tree only ever says `Po1`, CDP/LLDP only ever say `Gi1/0/1`. `show etherchannel
+> summary` (or `show port-channel summary`) is what maps one to the other. Without it, a
+> fully bundled network produces the same disconnected boxes — every switch drawn, not one
+> line between them.
 
 What each command contributes, whichever subcommand you run:
 

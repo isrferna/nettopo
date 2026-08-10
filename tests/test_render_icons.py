@@ -43,3 +43,19 @@ def test_highlight_overrides_the_stroke_color() -> None:
 def test_no_highlight_keeps_the_default_stroke_color() -> None:
     style = style_for_role(DeviceRole.SWITCH, highlight=False)
     assert "#FFD700" not in style
+
+
+def test_inferred_nodes_are_dashed() -> None:
+    style = style_for_role(DeviceRole.SWITCH, inferred=True)
+    assert style.rstrip(";").split(";")[-1] == "dashPattern=8 8"
+    assert "dashed=1" in style
+
+
+def test_a_device_can_be_both_the_root_and_only_inferred() -> None:
+    style = style_for_role(DeviceRole.SWITCH, highlight=True, inferred=True)
+    assert "strokeWidth=4" in style
+    assert "dashed=1" in style
+
+
+def test_captured_nodes_keep_a_solid_border() -> None:
+    assert "dashed=1" not in style_for_role(DeviceRole.SWITCH)

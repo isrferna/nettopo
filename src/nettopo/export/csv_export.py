@@ -23,6 +23,7 @@ _STP_HEADER = (
     "vlan",
     "device",
     "root_device",
+    "root_mac",
     "bridge_mac",
     "base_priority",
     "effective_priority",
@@ -31,6 +32,7 @@ _STP_HEADER = (
     "role",
     "state",
     "cost",
+    "link_type",
 )
 _HSRP_HEADER = ("vlan", "group", "virtual_ip", "device", "interface", "priority", "role", "preempt")
 _BGP_HEADER = (
@@ -178,6 +180,7 @@ def _write_stp(path: Path, model: NetworkModel) -> None:
                         stp_vlan.vlan,
                         device,
                         stp_vlan.root_device,
+                        stp_vlan.root_mac,
                         bridge.mac,
                         bridge.base_priority,
                         bridge.effective_priority,
@@ -186,6 +189,7 @@ def _write_stp(path: Path, model: NetworkModel) -> None:
                         port.role.value,
                         port.state.value,
                         port.cost,
+                        port.link_type,
                     )
                 )
     _write_table(path, _STP_HEADER, rows)

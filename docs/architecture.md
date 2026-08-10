@@ -261,9 +261,9 @@ command matches a pattern and returns just that command's output slice.
 | `show ip interface brief`, `show interfaces` | `parsing/interfaces.py` | ntc-templates | `Device.interfaces` |
 | `show vlan brief` | `parsing/vlan.py` | ntc-templates | `NetworkModel.vlans` |
 | `show cdp neighbors detail` | `parsing/cdp.py` | ntc-templates + own regex (see below) | raw `Link`s (`discovery="cdp"`) |
-| `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`, see below) |
+| `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`, see below), plus the neighbor's chassis MAC (`Device.chassis_id`), which CDP never reports |
 | `show etherchannel summary`, `show port-channel summary` | `parsing/etherchannel.py` | ntc-templates (see below) | `Interface.po_id`, `Interface.po_members` |
-| `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) |
+| `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) — and, when links are bundled, needs `show etherchannel summary` alongside it for the STP view to resolve `Po1` onto its members |
 | `show standby brief` | `parsing/hsrp.py` | not yet implemented | — (Phase 5) |
 | `show ip bgp summary` | `parsing/bgp.py` | not yet implemented | — (Phase 6) |
 
@@ -334,11 +334,39 @@ Concretely, per VLAN block it extracts two things independently:
    become one `StpBridge`.
 2. **The port table** — the `Interface / Role / Sts / Cost / Prio.Nbr / Type` rows,
    parsed into `StpPort`s after mapping Cisco's abbreviations (`Root`/`Desg`/`Altn`/
-   `Back`/`Disb`, `FWD`/`BLK`/`LRN`/`LIS`/`DIS`) onto `StpRole`/`StpState`.
+   `Back`/`Disb`, `FWD`/`BLK`/`LRN`/`LIS`/`DIS`/`BKN`) onto `StpRole`/`StpState`. The
+   Type column is kept verbatim in `StpPort.link_type`, which `StpPort.is_edge` reads to
+   tell a port facing a switch from a PortFast port facing a host. The state is matched as
+   letters plus an optional starred suffix, because IOS glues the reason for an
+   inconsistency straight onto it (`BKN*ROOT_Inc`) and a stricter pattern loses the whole
+   row — and with it every link the STP view would have drawn through that port.
 
 `ingest/model_builder.py` then folds each device's per-VLAN `StpBridge` + `StpPort`s
-into the shared `model.stp[vlan_id]: StpVlan`, and records whichever device reported
-itself as root as that VLAN's `root_device`.
+into the shared `model.stp[vlan_id]: StpVlan`, records whichever device reported
+itself as root as that VLAN's `root_device`, and keeps the reported root address in
+`root_mac` — which is the only trace of the root left when no captured device is it.
+
+### How the STP view joins spanning-tree state to a topology
+
+`show spanning-tree` never names the device on the other end of a port, so the STP view
+takes its links from the CDP/LLDP topology in `model.links` and looks up each end's
+`StpPort` to label and color it. The two sources name interfaces differently in exactly
+one case, and it is the common one: a **port-channel** appears in spanning-tree only as
+`Po1`, and in CDP/LLDP only as its members `Gi1/0/1`, `Gi1/0/2`. `NetworkModel.port_channel_name()`
+(shared with the L2 view, and populated by `parsing/etherchannel.py`) is what maps one
+onto the other; the members then collapse into a single drawn link, since spanning-tree
+runs over the bundle as one logical port. Without `show etherchannel summary` in the
+captures there is no mapping to make, and a fully bundled network yields a diagram of
+disconnected nodes — which `cli.py` reports as an explicit warning rather than leaving
+the user to notice.
+
+The view draws two kinds of node. A device with a capture comes from its own `StpBridge`.
+A device seen only in a neighbor's output has no bridge data at all, so it is drawn dashed
+(`DiagramNode.inferred` -> `render/icons.py`) and labeled with its name alone, and is
+admitted only through a non-Edge port. When such a device is the root, it is highlighted
+only if `Device.chassis_id` — which LLDP alone reports — matches `StpVlan.root_mac`
+exactly; an exact match either names the root or says nothing, where a looser heuristic
+could highlight the wrong switch.
 
 ## The data model and grouping
 
