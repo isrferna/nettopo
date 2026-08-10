@@ -38,6 +38,7 @@ def parse_lldp(local_device: str, raw_text: str, *, platform: str = "cisco_ios")
                 remote_interface=normalize(neighbor_interface),
                 discovery="lldp",
                 remote_platform=record.get("platform") or None,
+                remote_mgmt_ip=record.get("mgmt_address") or None,
                 remote_capabilities=(record.get("capabilities") or "").replace(",", " ").split(),
             )
         )

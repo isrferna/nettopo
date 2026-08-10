@@ -28,6 +28,7 @@ def test_parse_lldp_prefers_port_description_and_normalizes_names() -> None:
     assert link.remote_interface == "Gi1/0/1"
     assert link.discovery == "lldp"
     assert link.remote_capabilities == ["B", "R"]
+    assert link.remote_mgmt_ip == "10.0.0.2"
 
 
 def test_parse_lldp_falls_back_to_port_id_when_the_description_is_free_text() -> None:

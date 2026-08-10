@@ -93,7 +93,9 @@ nettopo parse -i ./captures -o ./output
 ```
 
 Writes `output/csv/devices.csv` (including each device's serial, from its own
-`show version` or from the name a Nexus neighbor advertises), `interfaces.csv`,
+`show version` or from the name a Nexus neighbor advertises; its platform, from its own
+`show version` or from the CDP/LLDP report of a neighbor; and its management IP, from
+CDP's `Management address(es)` block or LLDP's management TLV), `interfaces.csv`,
 `neighbors.csv`, `vlans.csv`, `stp.csv` (base *and* effective bridge priority — see
 [PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), and header-only `hsrp.csv`/`bgp.csv`
 until Phases 5–6 add those parsers.
@@ -108,7 +110,9 @@ model is built — see
 
 Renders the physical/link-layer topology (from CDP/LLDP) as a draw.io diagram: nodes are
 devices styled with Cisco icons by inferred role, and links carry per-end interface
-labels.
+labels. Needs `show cdp neighbors detail` and/or `show lldp neighbors detail` in the
+captures — see [Which commands each subcommand
+needs](#which-commands-each-subcommand-needs).
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
@@ -138,6 +142,12 @@ Renders per-VLAN Rapid-PVST spanning-tree diagrams: switches only, root bridge
 highlighted, links colored by forwarding (green) vs. blocking (red) port state and
 labeled with role/state at each end. Node labels show the bridge MAC and effective
 priority (base priority is in `stp.csv`).
+
+Needs `show spanning-tree` **and** a neighbor-discovery command (`show cdp neighbors
+detail` / `show lldp neighbors detail`) in the captures: spanning-tree output alone never
+says who is on the other end of a port, so without CDP/LLDP the diagram has nodes and no
+links. See [Which commands each subcommand
+needs](#which-commands-each-subcommand-needs).
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
@@ -173,10 +183,77 @@ The `-i`/`--input` directory holds one text file per device. Each file concatena
 outputs of several `show` commands, each preceded by that device's prompt line
 (`hostname#show ...`) — this is how `nettopo` both identifies the device as a *source*
 device (as opposed to one only ever mentioned by a neighbor) and splits the file back
-into per-command sections. Which commands each view needs is listed in
-[PROJECT_SPEC.md §4](PROJECT_SPEC.md#4-ingestion-v1-files-only); `tests/fixtures/captures/`
-has worked examples. Files are read as `utf-8-sig`, so a leading UTF-8 BOM is handled
-transparently.
+into per-command sections. `tests/fixtures/captures/` has worked examples. Files are read
+as `utf-8-sig`, so a leading UTF-8 BOM is handled transparently.
+
+#### Which commands each subcommand needs
+
+Nothing is mandatory: a missing command means the data it feeds is simply absent (empty
+CSV columns, missing links, a view with nothing to draw), never an error. The table below
+is what each subcommand needs to produce a *complete* result.
+
+| Subcommand | Required | Optional, adds |
+|---|---|---|
+| `parse` | — | every command in the next table; each fills its own CSV table or columns |
+| `l2` | `show cdp neighbors detail` and/or `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (only for `--link-mode port-channel`) |
+| `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) |
+| `hsrp` | `show standby brief` — *not yet implemented (Phase 5)* | |
+| `bgp` | `show ip bgp summary` — *not yet implemented (Phase 6)* | |
+
+> **`stp` needs CDP/LLDP too.** `show spanning-tree` reports a device's *own* bridge and
+> port roles/states, but never says who is on the other end of a port — on its own it
+> yields nodes and no edges. The STP view draws its links from the CDP/LLDP topology and
+> labels each end with the spanning-tree state found there, so without a neighbor
+> discovery command you get a diagram of disconnected boxes.
+
+What each command contributes, whichever subcommand you run:
+
+| `show` command | Fills |
+|---|---|
+| `show version` | `platform`, `model`, `os` and `serial` in `devices.csv`, and the canonical hostname every neighbor's spelling is correlated onto — without it that name falls back to the prompt line, which is usually the same |
+| `show cdp neighbors detail` | Links between devices (`neighbors.csv`, and the links in both the L2 and STP diagrams), plus each neighbor's role/icon, platform and management IP |
+| `show lldp neighbors detail` | The same, for neighbors that don't speak CDP. Where both describe one adjacency, CDP wins |
+| `show ip interface brief` | `interfaces.csv`: admin/operational state and IP per interface |
+| `show interfaces` | `interfaces.csv`: descriptions, precise IP/prefix, link state. Richer than `show ip interface brief` and wins where the two overlap |
+| `show vlan brief` | `vlans.csv` |
+| `show spanning-tree` | `stp.csv` and the STP diagrams: bridge IDs, base and effective priority, per-port role/state |
+| `show etherchannel summary` (IOS/IOS-XE) · `show port-channel summary` (NX-OS) | `po_id`/`po_members` in `interfaces.csv`, and the bundles `l2 --link-mode port-channel` collapses links onto |
+
+A capture covering everything implemented today:
+
+```
+sw1-access#show version
+...
+sw1-access#show cdp neighbors detail
+...
+sw1-access#show lldp neighbors detail
+...
+sw1-access#show ip interface brief
+...
+sw1-access#show interfaces
+...
+sw1-access#show vlan brief
+...
+sw1-access#show spanning-tree
+...
+sw1-access#show etherchannel summary
+...
+```
+
+#### Three things that trip captures up
+
+- **Run each command with no arguments.** A prompt line has to match the command *in
+  full*, so `show spanning-tree vlan 10` is not recognized as `show spanning-tree` and
+  that section is skipped silently. Capture the unfiltered output and let `nettopo` do
+  the per-VLAN split.
+- **Abbreviations are fine.** `show ver`, `show cdp neigh det`, `show ip int br` and
+  `show span` all match, so a capture taken by typing short forms works as-is.
+- **One section per command per file.** Only the first matching section is read; a
+  command captured twice contributes its first occurrence only.
+
+The prompt line drives all of this, so keep it — the filename is only a fallback for
+naming a device whose file has no prompt line at all. Both `hostname#` and `hostname>`
+work.
 
 See [`PROJECT_SPEC.md` §9](PROJECT_SPEC.md#9-cli-design) for the CLI design rationale.
 

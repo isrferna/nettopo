@@ -162,8 +162,8 @@ Input is a **directory**. Each file is one device's captured output containing s
 |------|----------|
 | identity | `show version` |
 | L2 | `show cdp neighbors detail`, `show lldp neighbors detail`, `show etherchannel summary` (IOS/IOS-XE) or `show port-channel summary` (NX-OS) |
-| L3/VLAN | `show ip interface brief`, `show interfaces` (or `show run interface`), `show vlan brief` |
-| STP | `show spanning-tree` (per-VLAN Rapid-PVST) |
+| L3/VLAN | `show ip interface brief`, `show interfaces`, `show vlan brief` |
+| STP | `show spanning-tree` (per-VLAN Rapid-PVST), **plus** the L2 discovery commands: spanning-tree output carries a device's own bridge and port states but never names the device on the other end of a port, so the STP view takes its links from the CDP/LLDP topology |
 | HSRP | `show standby brief` (and `show standby` if detail needed) |
 | BGP | `show ip bgp summary` |
 
@@ -292,12 +292,12 @@ class Interface:
 class Device:
     hostname: str                          # canonical correlation key
     is_source: bool = False                # we have this device's own capture
-    platform: str | None = None            # raw: "cisco C9300-48P"
+    platform: str | None = None            # raw: "cisco C9300-48P"; own `show version`, or CDP/LLDP
     model: str | None = None               # parsed: "C9300-48P"
     os: str | None = None                  # "ios" | "ios-xe" | "nxos"
     serial: str | None = None              # own `show version`, or the NX-OS name suffix
     role: DeviceRole = DeviceRole.UNKNOWN
-    mgmt_ip: str | None = None
+    mgmt_ip: str | None = None             # as a neighbor advertises it over CDP/LLDP
     asn: int | None = None                 # for BGP
     interfaces: dict[str, Interface] = field(default_factory=dict)  # keyed by normalized name
 
@@ -310,6 +310,7 @@ class Link:
     remote_interface: str
     discovery: str = "cdp"                  # "cdp" | "lldp"
     remote_platform: str | None = None
+    remote_mgmt_ip: str | None = None      # CDP "Management address(es)" / LLDP management TLV
     remote_capabilities: list[str] = field(default_factory=list)  # ["Router","Switch"] vs ["Host","Phone"]
 
     def key(self) -> frozenset:

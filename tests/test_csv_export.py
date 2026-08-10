@@ -39,6 +39,7 @@ def _sample_model() -> NetworkModel:
             local_interface="Gi1/0/1",
             remote_device="sw2",
             remote_interface="Gi1/0/2",
+            remote_mgmt_ip="192.168.1.2",
             remote_capabilities=["Switch", "IGMP"],
         )
     )
@@ -66,6 +67,7 @@ def test_devices_csv_has_one_row_per_device(tmp_path: Path) -> None:
     assert {row["hostname"] for row in rows} == {"sw1", "sw2"}
     sw1 = next(row for row in rows if row["hostname"] == "sw1")
     assert sw1["is_source"] == "True"
+    assert sw1["platform"] == "cisco C9300"
     assert sw1["os"] == "ios"
     assert sw1["serial"] == "FOC2134X0ABC"
 
@@ -74,6 +76,7 @@ def test_neighbors_csv_joins_capabilities_with_semicolons(tmp_path: Path) -> Non
     csv_dir = write_csv_tables(_sample_model(), tmp_path)
     (row,) = _read_rows(csv_dir / "neighbors.csv")
     assert row["remote_capabilities"] == "Switch;IGMP"
+    assert row["remote_mgmt_ip"] == "192.168.1.2"
 
 
 def test_vlans_csv_is_sorted_by_vlan_id(tmp_path: Path) -> None:

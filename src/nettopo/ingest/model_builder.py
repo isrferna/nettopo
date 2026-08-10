@@ -18,7 +18,7 @@ whichever device ends up on the discarded side.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 
 from nettopo.ingest.base import Capture, DataSource
@@ -57,6 +57,12 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
         (link.remote_device for link in discovered), set(model.devices)
     )
     serial_by_hostname = _serials(canonical_by_spelling)
+    platform_by_hostname = _best_reported(
+        discovered, canonical_by_spelling, lambda link: link.remote_platform
+    )
+    mgmt_ip_by_hostname = _best_reported(
+        discovered, canonical_by_spelling, lambda link: link.remote_mgmt_ip
+    )
 
     # One entry per (local port, neighbor): the two protocols describing the same
     # adjacency collapse here, before the direction-independent pass below collapses the
@@ -71,6 +77,14 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
             remote.role = _infer_role(resolved.remote_capabilities)
         if remote.serial is None:
             remote.serial = serial_by_hostname.get(resolved.remote_device)
+        # A source device's own `show version` is authoritative even when it yielded no
+        # platform, so a neighbor's guess never overwrites it.
+        if remote.platform is None and not remote.is_source:
+            remote.platform = platform_by_hostname.get(resolved.remote_device)
+        # Unlike platform, no parser reads a device's management address out of its own
+        # capture, so this is the only source there is and source devices take it too.
+        if remote.mgmt_ip is None:
+            remote.mgmt_ip = mgmt_ip_by_hostname.get(resolved.remote_device)
 
         port_key = (resolved.local_device, resolved.local_interface, resolved.remote_device)
         existing = links_by_port.get(port_key)
@@ -159,6 +173,34 @@ def _serials(canonical_by_spelling: dict[str, str]) -> dict[str, str]:
         for spelling, canonical in canonical_by_spelling.items()
         if (serial := split_serial_suffix(spelling)[1]) is not None
     }
+
+
+def _best_reported(
+    discovered: Sequence[Link],
+    canonical_by_spelling: dict[str, str],
+    attribute: Callable[[Link], str | None],
+) -> dict[str, str]:
+    """Best value neighbors reported for `attribute`, keyed by canonical hostname.
+
+    Facts about a device we hold no capture for can only come from the devices that see
+    it, and several of them usually do. Those reports are ranked rather than taken
+    first-come, on the same CDP-over-LLDP order the rest of the build uses: CDP carries
+    the chassis model and management address the device itself advertises, where LLDP's
+    equivalents are optional TLVs many implementations leave empty or fill loosely.
+    Resolving the ranking here, over every raw link, keeps the answer independent of the
+    order the captures happened to be read in.
+    """
+    best_by_hostname: dict[str, tuple[int, str]] = {}
+    for link in discovered:
+        value = attribute(link)
+        if not value:
+            continue
+        hostname = canonical_by_spelling[link.remote_device]
+        rank = _discovery_rank(link)
+        current = best_by_hostname.get(hostname)
+        if current is None or rank < current[0]:
+            best_by_hostname[hostname] = (rank, value)
+    return {hostname: value for hostname, (_, value) in best_by_hostname.items()}
 
 
 def _discovery_rank(link: Link) -> int:

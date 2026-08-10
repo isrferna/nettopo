@@ -163,7 +163,7 @@ flowchart TD
     G --> H["resolve_device_identities(every reported spelling, known_hostnames)<br/>utils/hostnames.py"]
     subgraph phase3["Phase 3 — canonicalize, register, de-duplicate"]
         H --> I["rewrite Link.remote_device to its canonical name"]
-        I --> J["register the remote Device<br/>(+ role from remote_capabilities, + serial)"]
+        I --> J["register the remote Device<br/>(+ role from remote_capabilities, + serial, + platform, + mgmt_ip)"]
         J --> K["one link per (local device, local port, neighbor)<br/>CDP wins over LLDP"]
         K --> L["de-duplicate by Link.key()<br/>(direction-independent frozenset of both ends)"]
     end
@@ -201,6 +201,32 @@ discarded side at `DeviceRole.UNKNOWN`. A device never described by any neighbor
 capabilities (e.g. an isolated source device) stays `UNKNOWN` and renders as a plain box
 rather than a guessed icon.
 
+**Why `Device.platform` and `Device.mgmt_ip` are backfilled from CDP/LLDP.** A device we
+hold no capture for has no `show version` and no interface table of its own, yet every
+neighbor that sees it advertises both its hardware (CDP's `Platform:` line, LLDP's
+inventory `Model:`) and its management address — values already carried on the `Link` as
+`remote_platform` and `remote_mgmt_ip`. Registering a remote device copies them across,
+so `devices.csv` describes neighbors and not just source devices. `_best_reported()`
+resolves both, and among competing reports CDP outranks LLDP on the same grounds as
+everywhere else in the build: CDP carries what the device itself advertises, where LLDP's
+equivalents are optional TLVs many implementations leave empty or fill loosely. That
+ranking is resolved up front, over all raw links, rather than first-come inside the
+registration loop — otherwise the answer would depend on the order the captures happened
+to be read in.
+
+The two fields differ in whether a source device accepts the backfill, and the difference
+is about what else could fill them. `platform` is refused for source devices: their own
+`show version` is authoritative *including* when it produced nothing, since a neighbor's
+view of a device is never better than its own. `mgmt_ip` is accepted by every device,
+because no parser reads a management address out of a device's own capture — a source
+device has no self-reported value to protect, so refusing the backfill would just leave
+the column permanently empty.
+
+`Device.model` (the vendor-prefix-stripped form) is deliberately *not* derived this way:
+CDP platform strings are free text and are not always a hardware model at all (`VMware
+ESXi`), so inferring one would put noise in a column that today only ever holds a parsed
+`show version` value.
+
 ### Why interface-name normalization is centralized
 
 The same physical port can appear as `Gi1/0/1` in one `show` command's output and
@@ -234,7 +260,7 @@ command matches a pattern and returns just that command's output slice.
 | `show version` | `parsing/version.py` | ntc-templates | hostname, `Device.platform/model/os/serial` |
 | `show ip interface brief`, `show interfaces` | `parsing/interfaces.py` | ntc-templates | `Device.interfaces` |
 | `show vlan brief` | `parsing/vlan.py` | ntc-templates | `NetworkModel.vlans` |
-| `show cdp neighbors detail` | `parsing/cdp.py` | ntc-templates | raw `Link`s (`discovery="cdp"`) |
+| `show cdp neighbors detail` | `parsing/cdp.py` | ntc-templates + own regex (see below) | raw `Link`s (`discovery="cdp"`) |
 | `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`, see below) |
 | `show etherchannel summary`, `show port-channel summary` | `parsing/etherchannel.py` | ntc-templates (see below) | `Interface.po_id`, `Interface.po_members` |
 | `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) |
@@ -256,6 +282,24 @@ capture actually contains to select the template. A capture whose spelling has n
 template for the platform in effect (an NX-OS capture parsed under the `cisco_ios`
 default, say) logs a warning and yields no bundles, rather than aborting the run over a
 `--platform` mismatch.
+
+### Why CDP's management address is parsed outside ntc-templates
+
+A CDP entry advertises two unrelated addresses: `Entry address(es)` (`Interface
+address(es)` on NX-OS), the address of the neighbor's *connected interface*, and
+`Management address(es)` (`Mgmt address(es)` on NX-OS), the address you would actually
+manage it on. They are routinely on different networks — a transit link vs. an
+out-of-band management VLAN. The two ntc-templates templates disagree about which one
+they expose under the name `MGMT_ADDRESS`: `cisco_nxos` reads the management block and
+keeps the interface address in a separate field, while `cisco_ios` reads the *entry*
+address into `MGMT_ADDRESS` and never looks at the management block at all. Taking that
+field at face value would silently put a link address into `Device.mgmt_ip` on every IOS
+capture. `parsing/cdp.py` therefore walks the entries itself for the management block —
+matching both spellings — and uses the template's value only as a fallback for neighbors
+that advertise no management address, where an interface address still beats nothing.
+The walk is keyed by device id, which is what the `cisco_ios` template reports as the
+neighbor name; NX-OS names its entries by `System Name` instead, so lookups miss there
+and fall through to the template value, which on that platform is already correct.
 
 ### Which LLDP field names the neighbor's port
 

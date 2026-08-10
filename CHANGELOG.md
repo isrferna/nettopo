@@ -25,6 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `po_id`/`po_members` columns in `interfaces.csv` are no longer always empty.
 - `DiagramLink.tooltip`, rendered by `render/drawio.py` as the link's draw.io `tooltip`
   attribute.
+- `Device.platform` is now filled in for devices we hold no capture of, from the platform
+  their neighbors report over CDP (`Platform: cisco ISR4331/K9`) or LLDP. That value was
+  already parsed into `Link.remote_platform` and exported in `neighbors.csv`, but only
+  `show version` ever wrote `Device.platform`, so the `platform` column of `devices.csv`
+  was always empty for neighbor-only devices. A source device keeps whatever its own
+  `show version` produced, and CDP outranks LLDP when both describe the same neighbor.
+  `Device.model` is unchanged: it stays a `show version`-only field, since CDP platform
+  strings are not always a hardware model (`VMware ESXi`).
+- `Device.mgmt_ip` is now populated, from the management address a neighbor advertises
+  over CDP or LLDP, and a `remote_mgmt_ip` column joins `neighbors.csv`. The field
+  existed since Phase 1 but nothing wrote it, so the `mgmt_ip` column of `devices.csv`
+  was always empty. Every device takes this value, source or not, since no parser reads
+  a management address out of a device's own capture.
+- `parsing/cdp.py` reads CDP's `Management address(es)` block itself instead of trusting
+  ntc-templates' `mgmt_address`. The `cisco_ios` template fills that field from `Entry
+  address(es)` — the neighbor's *connected interface* address, routinely a transit link
+  rather than the management network — and never reads the management block; the
+  `cisco_nxos` template does read it. Both spellings (`Management`/`Mgmt address(es)`,
+  `IP address`/`IPv4 Address`) are now handled, with the template's value kept as a
+  fallback for neighbors that advertise no management address.
 
 ### Changed
 

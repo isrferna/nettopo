@@ -90,6 +90,70 @@ def test_device_role_is_inferred_from_a_neighbors_reported_capabilities() -> Non
     assert model.devices["core-rtr.example.com"].role is DeviceRole.ROUTER
 
 
+def test_a_non_source_devices_platform_comes_from_a_neighbors_report() -> None:
+    # core-rtr has no capture of its own, so its platform can only come from the
+    # "Platform:" line of the CDP report that names it.
+    model = _build_model()
+    assert model.devices["core-rtr.example.com"].platform == "cisco ISR4331/K9"
+
+
+def test_a_source_devices_own_show_version_outranks_a_neighbors_report() -> None:
+    # sw2-dist's CDP reports sw1-access as "cisco WS-C2960X-24TS-L"; sw1-access's own
+    # `show version` is the authority on what it is.
+    model = _build_model()
+    assert model.devices["sw1-access"].platform == "cisco WS-C2960X-24TS-L"
+    assert model.devices["sw1-access"].is_source is True
+
+
+def test_mgmt_ip_is_filled_in_from_a_neighbors_report_for_source_devices_too() -> None:
+    # Unlike platform, nothing parses a device's management address out of its own
+    # capture, so a source device has no self-reported value to protect: sw2-dist's only
+    # possible mgmt_ip is the one sw1-access's CDP advertises for it.
+    model = _build_model()
+    assert model.devices["sw2-dist"].mgmt_ip == "192.168.1.2"
+    assert model.devices["core-rtr.example.com"].mgmt_ip == "10.0.0.254"
+
+
+def test_a_cdp_reported_platform_outranks_an_lldp_reported_one(tmp_path: Path) -> None:
+    # The two reports reach the builder in filename order, so `a-sw` (LLDP only) is read
+    # before `b-sw` (CDP only): CDP must still win, not whichever arrived first.
+    (tmp_path / "a-sw.txt").write_text(
+        "a-sw#show lldp neighbors detail\n"
+        "------------------------------------------------\n"
+        "Local Intf: Gi1/0/1\n"
+        "Chassis id: 00de.fb12.9999\n"
+        "Port id: Gi0/1\n"
+        "Port Description: Gi0/1\n"
+        "System Name: edge-rtr\n"
+        "\n"
+        "System Description:\n"
+        "Cisco IOS Software\n"
+        "\n"
+        "Time remaining: 101 seconds\n"
+        "System Capabilities: B,R\n"
+        "Enabled Capabilities: B,R\n"
+        "MED Information:\n"
+        "    Model: LLDP-INVENTORY-MODEL\n"
+        "\n"
+        "Total entries displayed: 1\n"
+    )
+    (tmp_path / "b-sw.txt").write_text(
+        "b-sw#show cdp neighbors detail\n"
+        "-------------------------\n"
+        "Device ID: edge-rtr\n"
+        "Entry address(es):\n"
+        "  IP address: 10.0.0.1\n"
+        "Platform: cisco ISR4451-X/K9,  Capabilities: Router\n"
+        "Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet0/2\n"
+        "Holdtime : 151 sec\n"
+        "\n"
+        "Total cdp entries displayed : 1\n"
+    )
+    model = build_network_model(FileDataSource(tmp_path))
+
+    assert model.devices["edge-rtr"].platform == "cisco ISR4451-X/K9"
+
+
 def test_stp_bridges_are_populated_per_vlan_from_both_devices() -> None:
     model = _build_model()
     vlan10 = model.stp[10]

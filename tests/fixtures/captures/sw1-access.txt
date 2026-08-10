@@ -38,7 +38,7 @@ Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, 
 advertisement version: 2
 Duplex: full
 Management address(es):
-  IP address: 10.0.0.2
+  IP address: 192.168.1.2
 
 -------------------------
 Device ID: core-rtr.example.com
