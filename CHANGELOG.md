@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0rc1] - 2026-08-10
+
+Release candidate: neighbor identity resolution. Pre-releases are not installed by
+`pip` unless asked for — `pip install --pre nettopo` or `pip install nettopo==0.3.0rc1`.
+
 ### Fixed
 
 - A device reported under different names by CDP and LLDP is no longer split into
@@ -27,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the new `looks_like_interface()` in `utils/interfaces.py`.
 - `ingest/model_builder.py` keeps a single link per local port and neighbor, preferring
   the CDP report over the LLDP one, so a link described by both protocols renders once.
+- `nettopo.__version__` is read from the installed distribution metadata instead of being
+  hardcoded. It had been left at the Phase 0 scaffolding's `0.0.1` through v0.1.0 and
+  v0.2.0, disagreeing with `pyproject.toml` and therefore with what was on PyPI.
 
 ### Added
 
