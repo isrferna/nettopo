@@ -162,8 +162,8 @@ Input is a **directory**. Each file is one device's captured output containing s
 |------|----------|
 | identity | `show version` |
 | L2 | `show cdp neighbors detail`, `show lldp neighbors detail`, `show etherchannel summary` (IOS/IOS-XE) or `show port-channel summary` (NX-OS) |
-| L3/VLAN | `show ip interface brief`, `show interfaces` (or `show run interface`), `show vlan brief` |
-| STP | `show spanning-tree` (per-VLAN Rapid-PVST) |
+| L3/VLAN | `show ip interface brief`, `show interfaces`, `show vlan brief` |
+| STP | `show spanning-tree` (per-VLAN Rapid-PVST), **plus** the L2 discovery commands: spanning-tree output carries a device's own bridge and port states but never names the device on the other end of a port, so the STP view takes its links from the CDP/LLDP topology |
 | HSRP | `show standby brief` (and `show standby` if detail needed) |
 | BGP | `show ip bgp summary` |
 
