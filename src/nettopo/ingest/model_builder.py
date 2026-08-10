@@ -22,9 +22,10 @@ from collections.abc import Iterable, Sequence
 from dataclasses import replace
 
 from nettopo.ingest.base import Capture, DataSource
-from nettopo.model.entities import Device, DeviceRole, Link, NetworkModel, StpVlan
+from nettopo.model.entities import Device, DeviceRole, Interface, Link, NetworkModel, StpVlan
 from nettopo.parsing.cdp import parse_cdp
-from nettopo.parsing.interfaces import parse_interfaces
+from nettopo.parsing.etherchannel import PortChannelCapture, parse_port_channels
+from nettopo.parsing.interfaces import interface_type, parse_interfaces
 from nettopo.parsing.lldp import parse_lldp
 from nettopo.parsing.spanning_tree import parse_spanning_tree
 from nettopo.parsing.version import parse_version
@@ -103,6 +104,7 @@ def _populate_source_devices(
             device.os = version_info.os
             device.serial = version_info.serial
         device.interfaces.update(parse_interfaces(capture.raw_text, platform=platform))
+        _apply_port_channels(device, parse_port_channels(capture.raw_text, platform=platform))
 
         for vlan in parse_vlans(capture.raw_text, platform=platform):
             model.vlans.setdefault(vlan.vlan_id, vlan)
@@ -116,6 +118,25 @@ def _populate_source_devices(
                 stp_vlan.root_device = hostname
 
     return hostname_by_hint
+
+
+def _apply_port_channels(device: Device, port_channels: Sequence[PortChannelCapture]) -> None:
+    """Record each bundle on its port-channel interface and stamp its members with `po_id`.
+
+    Both ends of that relationship are written because the L2 view reads them from
+    opposite directions: a link is bundled by its member's `po_id`, and the bundle's own
+    interface carries the member list. Either interface may be absent from
+    `show interfaces` (a capture need not include every command), so both are created on
+    demand rather than assumed present.
+    """
+    for port_channel in port_channels:
+        _get_or_create_interface(device, port_channel.name).po_members = list(port_channel.members)
+        for member_name in port_channel.members:
+            _get_or_create_interface(device, member_name).po_id = port_channel.po_id
+
+
+def _get_or_create_interface(device: Device, name: str) -> Interface:
+    return device.interfaces.setdefault(name, Interface(name=name, type=interface_type(name)))
 
 
 def _discover_links(

@@ -11,6 +11,10 @@ report: `acc-sw3` sees it as `nxos-core1(FDO21120U5D)` over CDP (NX-OS appends t
 chassis serial to its device id) and as plain `nxos-core1` over LLDP, while `acc-sw4`
 sees it as `NXOS-CORE1.example.com`. `acc-sw3` likewise sees one host as `esxi-host03`
 over CDP and `esxi-host03.example.com` over LLDP.
+
+`tests/fixtures/captures_portchannel/` is a third directory for port-channel data: two
+source switches joined by a two-member LACP bundle both sides call `Po1`, plus a host on
+an unbundled port.
 """
 
 from __future__ import annotations
@@ -19,10 +23,11 @@ from pathlib import Path
 
 from nettopo.ingest.files import FileDataSource
 from nettopo.ingest.model_builder import build_network_model
-from nettopo.model.entities import DeviceRole, NetworkModel
+from nettopo.model.entities import DeviceRole, InterfaceType, NetworkModel
 
 FIXTURES = Path(__file__).parent / "fixtures" / "captures"
 NXOS_FIXTURES = Path(__file__).parent / "fixtures" / "captures_nxos"
+PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "captures_portchannel"
 
 
 def _build_model() -> NetworkModel:
@@ -31,6 +36,10 @@ def _build_model() -> NetworkModel:
 
 def _build_nxos_model() -> NetworkModel:
     return build_network_model(FileDataSource(NXOS_FIXTURES))
+
+
+def _build_port_channel_model() -> NetworkModel:
+    return build_network_model(FileDataSource(PORT_CHANNEL_FIXTURES))
 
 
 def test_every_source_device_is_registered_and_marked_as_source() -> None:
@@ -157,3 +166,27 @@ def test_a_non_source_neighbor_seen_short_and_as_an_fqdn_is_one_device() -> None
     model = _build_nxos_model()
     assert "esxi-host03.example.com" not in model.devices
     assert model.devices["esxi-host03"].role is DeviceRole.HOST
+
+
+def test_port_channel_membership_is_recorded_on_both_the_bundle_and_its_members() -> None:
+    device = _build_port_channel_model().devices["po-sw1"]
+
+    assert device.interfaces["Po1"].po_members == ["Gi1/0/1", "Gi1/0/2"]
+    assert device.interfaces["Gi1/0/1"].po_id == 1
+    assert device.interfaces["Gi1/0/2"].po_id == 1
+
+
+def test_an_interface_only_named_by_the_bundle_table_is_still_created(tmp_path: Path) -> None:
+    # A capture need not carry `show interfaces`/`show ip interface brief` for every
+    # port the bundle table names.
+    (tmp_path / "sw9.txt").write_text(
+        "sw9#show etherchannel summary\n"
+        "Group  Port-channel  Protocol    Ports\n"
+        "------+-------------+-----------+---------------------------------------\n"
+        "4      Po4(SU)         LACP      Gi1/0/4(P)\n"
+    )
+    model = build_network_model(FileDataSource(tmp_path))
+
+    interfaces = model.devices["sw9"].interfaces
+    assert interfaces["Po4"].type is InterfaceType.PORT_CHANNEL
+    assert interfaces["Gi1/0/4"].type is InterfaceType.PHYSICAL

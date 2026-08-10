@@ -28,6 +28,7 @@ class DiagramLink:
     trgt_label: str = ""  # interface label at the target end
     label: str = ""  # label at the link's center
     color: str | None = None  # draw.io hex stroke color override, e.g. STP port state
+    tooltip: str = ""  # hover text, e.g. a port-channel's member interfaces
 
 
 @dataclass

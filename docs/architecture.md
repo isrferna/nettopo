@@ -236,6 +236,7 @@ command matches a pattern and returns just that command's output slice.
 | `show vlan brief` | `parsing/vlan.py` | ntc-templates | `NetworkModel.vlans` |
 | `show cdp neighbors detail` | `parsing/cdp.py` | ntc-templates | raw `Link`s (`discovery="cdp"`) |
 | `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`, see below) |
+| `show etherchannel summary`, `show port-channel summary` | `parsing/etherchannel.py` | ntc-templates (see below) | `Interface.po_id`, `Interface.po_members` |
 | `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) |
 | `show standby brief` | `parsing/hsrp.py` | not yet implemented | — (Phase 5) |
 | `show ip bgp summary` | `parsing/bgp.py` | not yet implemented | — (Phase 6) |
@@ -243,6 +244,18 @@ command matches a pattern and returns just that command's output slice.
 All ntc-templates-backed parsers go through `parsing/_textfsm.py`, a thin typed wrapper
 around `ntc_templates.parse_output` — the one place the untyped `ntc_templates` import
 boundary exists.
+
+### Why the port-channel parser picks its template from the prompt line
+
+Every other parser derives its ntc-templates command name from a fixed string, because
+one command has one name. The bundle table does not: IOS and IOS-XE print it under
+`show etherchannel summary`, NX-OS under `show port-channel summary`, and ntc-templates
+ships one template per spelling — never both for the same platform. `parsing/
+etherchannel.py` therefore matches both prompt-line spellings and uses whichever one the
+capture actually contains to select the template. A capture whose spelling has no
+template for the platform in effect (an NX-OS capture parsed under the `cisco_ios`
+default, say) logs a warning and yields no bundles, rather than aborting the run over a
+`--platform` mismatch.
 
 ### Which LLDP field names the neighbor's port
 
@@ -329,7 +342,7 @@ parsed captures in `tests/test_views_stp.py` and `tests/fixtures/stp_topology/`.
 
 | View | Module | Reads | Options | Produces |
 |---|---|---|---|---|
-| L2 | `views/l2.py` | `model.devices`, `model.links` | `--endpoints all\|network-only` | one `Diagram` |
+| L2 | `views/l2.py` | `model.devices`, `model.links` | `--endpoints all\|network-only`, `--link-mode physical\|port-channel` | one `Diagram` |
 | STP | `views/stp.py` | `model.stp`, `model.links`, `model.devices` | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per topology group |
 | HSRP | `views/hsrp.py` | — | — | not yet implemented (Phase 5) |
 | BGP | `views/bgp.py` | — | — | not yet implemented (Phase 6) |
@@ -355,19 +368,32 @@ instead of re-deriving a merged diagram, it renders the lowest-numbered VLAN in 
 group and labels the output file with every VLAN id the group covers
 (`stp_vlans-10_20_30.drawio`).
 
-### Why MLAG grouping is data-ready but currently a no-op
+### Why MLAG grouping is a mode rather than the default
 
-`views/l2.py` groups physical links into one rendered link per port-channel when the
-*local* interface's `Interface.po_id` is set (remote interfaces are never grouped this
-way, because a non-source remote device's interfaces are never populated — we have no
-capture for it). This is tested directly against hand-built `NetworkModel` objects in
-`tests/test_views_l2.py`. However, no parser in the current command set
-(`PROJECT_SPEC.md` section 4) populates `po_id`: it requires `show etherchannel summary`
-or equivalent, which is not one of the commands any phase parses. Against real captures
-today, every link's `po_id` is `None`, so grouping never triggers and every link renders
-individually. This is intentional forward-compatibility, not a bug: the grouping
-mechanism the spec requires ("MLAG shown via port-channel grouping") exists and is
-correct, it is simply waiting on a data source that is out of scope so far to add.
+`views/l2.py`'s `LinkMode` decides what one drawn link means: `PHYSICAL` draws one link
+per discovered adjacency, `PORT_CHANNEL` collapses every adjacency belonging to the same
+bundle into one. Both are needed and neither subsumes the other — the physical view is
+what you want when tracing a cable or a single port's state, the bundle view is what you
+want when reading the logical topology of a network where every uplink is an
+EtherChannel. `PHYSICAL` stays the default because it is the lossless one: it never hides
+a member port. Where no bundles exist, the two modes produce identical output, so the
+option costs nothing on networks without port-channels.
+
+The member interfaces a bundle hides are not lost — they travel in `DiagramLink.tooltip`
+and are rendered as the draw.io `tooltip` attribute on the link's `<object>` cell, which
+draw.io shows on hover in place of its default attribute dump.
+
+**Bundling is keyed on the device pair, not on link direction.** A bundle end is
+identified by its port-channel name — `Interface.po_id` for a member port,
+`Interface.po_members` for the port-channel interface itself, since CDP/LLDP on NX-OS may
+report an adjacency on `Po1` rather than on a member port. Only source devices have
+interfaces populated, so an adjacency toward a device we hold no capture for is bundled
+by its near end alone; that far end is then labeled with the member ports the neighbor
+reported instead of a `Po` name. The key sorts its two ends by device name rather than
+using the link's own local/remote direction, because `ingest/model_builder.py` keeps one
+direction per physical link and *which* direction depends on whose capture reported it
+first — two members of one bundle reported from opposite ends would otherwise become two
+separate bundles.
 
 ## Rendering and export
 

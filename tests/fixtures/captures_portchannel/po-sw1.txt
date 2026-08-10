@@ -1,0 +1,73 @@
+po-sw1#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+
+ROM: IOS-XE ROMMON
+
+po-sw1 uptime is 2 weeks, 3 days, 1 hour, 5 minutes
+System image file is "flash:packages.conf"
+
+
+cisco C9300-24P (X86) processor with 1367424K/6147K bytes of memory.
+Processor board ID FOC2540X0AA
+Configuration register is 0x102
+
+po-sw1#show cdp neighbors detail
+-------------------------
+Device ID: po-sw2.example.com
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco C9300-24P,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+-------------------------
+Device ID: po-sw2.example.com
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco C9300-24P,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+
+-------------------------
+Device ID: esxi-host01
+Entry address(es):
+  IP address: 10.0.0.50
+Platform: VMware ESX,  Capabilities: Host
+Interface: GigabitEthernet1/0/10,  Port ID (outgoing port): vmnic0
+Holdtime : 140 sec
+
+Total cdp entries displayed : 3
+
+po-sw1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Port-channel1          unassigned      YES unset  up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+GigabitEthernet1/0/2   unassigned      YES unset  up                    up
+GigabitEthernet1/0/10  unassigned      YES unset  up                    up
+
+po-sw1#show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      N - not in use, no aggregation
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP      Gi1/0/1(P)  Gi1/0/2(P)

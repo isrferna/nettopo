@@ -108,3 +108,24 @@ def test_link_color_is_applied_to_the_edge_style(tmp_path: Path) -> None:
 
     xml_text = output_path.read_text(encoding="utf-8")
     assert "#C62828" in xml_text
+
+
+def test_a_link_tooltip_is_rendered_as_a_drawio_tooltip_attribute(tmp_path: Path) -> None:
+    diagram = _diagram()
+    diagram.links[0].tooltip = "Members:<br>Gi1/0/1 — Gi2/0/1"
+    output_path = tmp_path / "l2_port-channels.drawio"
+    render_diagram(diagram, output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    link_object = next(
+        obj for obj in root.findall(".//object") if obj.find("./mxCell[@edge='1']") is not None
+    )
+    assert link_object.get("tooltip") == "Members:<br>Gi1/0/1 — Gi2/0/1"
+
+
+def test_a_link_without_a_tooltip_gets_no_tooltip_attribute(tmp_path: Path) -> None:
+    output_path = tmp_path / "l2.drawio"
+    render_diagram(_diagram(), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    assert all(obj.get("tooltip") is None for obj in root.findall(".//object"))

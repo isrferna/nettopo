@@ -44,9 +44,26 @@ def parse_interfaces(raw_text: str, *, platform: str = "cisco_ios") -> dict[str,
     return interfaces
 
 
+def interface_type(name: str) -> InterfaceType:
+    """Classify an already-normalized interface name by its canonical prefix."""
+    if "." in name:
+        return InterfaceType.SUBINTERFACE
+    if name.startswith("Vl"):
+        return InterfaceType.SVI
+    if name.startswith("Po"):
+        return InterfaceType.PORT_CHANNEL
+    if name.startswith("Lo"):
+        return InterfaceType.LOOPBACK
+    if name.startswith("Tu"):
+        return InterfaceType.TUNNEL
+    if name.startswith("Mgmt"):
+        return InterfaceType.MGMT
+    return InterfaceType.PHYSICAL
+
+
 def _get_or_create(interfaces: dict[str, Interface], raw_name: str) -> Interface:
     name = normalize(raw_name)
-    return interfaces.setdefault(name, Interface(name=name, type=_interface_type(name)))
+    return interfaces.setdefault(name, Interface(name=name, type=interface_type(name)))
 
 
 def _parse_ip_brief(raw_text: str, platform: str) -> list[dict[str, str]]:
@@ -71,19 +88,3 @@ def _oper_up(protocol_status: str) -> bool | None:
 
 def _to_int(value: str | None) -> int | None:
     return int(value) if value else None
-
-
-def _interface_type(name: str) -> InterfaceType:
-    if "." in name:
-        return InterfaceType.SUBINTERFACE
-    if name.startswith("Vl"):
-        return InterfaceType.SVI
-    if name.startswith("Po"):
-        return InterfaceType.PORT_CHANNEL
-    if name.startswith("Lo"):
-        return InterfaceType.LOOPBACK
-    if name.startswith("Tu"):
-        return InterfaceType.TUNNEL
-    if name.startswith("Mgmt"):
-        return InterfaceType.MGMT
-    return InterfaceType.PHYSICAL
