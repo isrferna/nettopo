@@ -93,8 +93,9 @@ nettopo parse -i ./captures -o ./output
 ```
 
 Writes `output/csv/devices.csv` (including each device's serial, from its own
-`show version` or from the name a Nexus neighbor advertises, and its platform, from its
-own `show version` or from the CDP/LLDP report of a neighbor), `interfaces.csv`,
+`show version` or from the name a Nexus neighbor advertises; its platform, from its own
+`show version` or from the CDP/LLDP report of a neighbor; and its management IP, from
+CDP's `Management address(es)` block or LLDP's management TLV), `interfaces.csv`,
 `neighbors.csv`, `vlans.csv`, `stp.csv` (base *and* effective bridge priority — see
 [PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), and header-only `hsrp.csv`/`bgp.csv`
 until Phases 5–6 add those parsers.

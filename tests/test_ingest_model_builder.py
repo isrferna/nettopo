@@ -105,6 +105,15 @@ def test_a_source_devices_own_show_version_outranks_a_neighbors_report() -> None
     assert model.devices["sw1-access"].is_source is True
 
 
+def test_mgmt_ip_is_filled_in_from_a_neighbors_report_for_source_devices_too() -> None:
+    # Unlike platform, nothing parses a device's management address out of its own
+    # capture, so a source device has no self-reported value to protect: sw2-dist's only
+    # possible mgmt_ip is the one sw1-access's CDP advertises for it.
+    model = _build_model()
+    assert model.devices["sw2-dist"].mgmt_ip == "192.168.1.2"
+    assert model.devices["core-rtr.example.com"].mgmt_ip == "10.0.0.254"
+
+
 def test_a_cdp_reported_platform_outranks_an_lldp_reported_one(tmp_path: Path) -> None:
     # The two reports reach the builder in filename order, so `a-sw` (LLDP only) is read
     # before `b-sw` (CDP only): CDP must still win, not whichever arrived first.

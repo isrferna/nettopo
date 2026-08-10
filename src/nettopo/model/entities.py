@@ -87,7 +87,7 @@ class Device:
     os: str | None = None  # "ios" | "ios-xe" | "nxos"
     serial: str | None = None  # own `show version`, or the suffix NX-OS advertises
     role: DeviceRole = DeviceRole.UNKNOWN
-    mgmt_ip: str | None = None
+    mgmt_ip: str | None = None  # as a neighbor advertises it over CDP/LLDP
     asn: int | None = None  # for BGP
     interfaces: dict[str, Interface] = field(default_factory=dict)  # keyed by normalized name
 
@@ -100,6 +100,7 @@ class Link:
     remote_interface: str
     discovery: str = "cdp"  # "cdp" | "lldp"
     remote_platform: str | None = None
+    remote_mgmt_ip: str | None = None
     remote_capabilities: list[str] = field(default_factory=list)  # ["Router","Switch"] vs [...]
 
     def key(self) -> frozenset[tuple[str, str]]:

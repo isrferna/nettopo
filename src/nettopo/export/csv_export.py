@@ -136,6 +136,7 @@ def _write_neighbors(path: Path, model: NetworkModel) -> None:
         "remote_interface",
         "discovery",
         "remote_platform",
+        "remote_mgmt_ip",
         "remote_capabilities",
     )
     rows = [
@@ -146,6 +147,7 @@ def _write_neighbors(path: Path, model: NetworkModel) -> None:
             link.remote_interface,
             link.discovery,
             link.remote_platform,
+            link.remote_mgmt_ip,
             ";".join(link.remote_capabilities),
         )
         for link in model.links
