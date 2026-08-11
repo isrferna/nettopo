@@ -122,6 +122,7 @@ sequenceDiagram
     loop each group
         CLI->>DIO: render_diagram(group.diagram, output_path)
         DIO->>N2G: add_node(style) / add_link(style) / layout(kk)
+        Note over DIO: scales the layout until the closest<br/>two nodes have room for their labels
         N2G-->>DIO: draw.io XML
         DIO->>LUC: lucidify_xml(xml)
         LUC-->>DIO: import-friendly XML
@@ -487,6 +488,37 @@ the default and render with draw.io's arrowhead. That arrow would also be a lie:
 view orders an edge's ends by device name (`views/stp.py`, `_build_edges`), so it would
 point from the alphabetically-earlier device to the later one, which says nothing about
 root ports or designated ports.
+
+### Node spacing: why the layout is scaled after igraph runs
+
+N2G's `layout()` hands the graph to igraph, then calls `fit_into()` to squeeze the result
+into the diagram's canvas — which `add_diagram()` fixes at 1360x864 for every diagram it
+will ever draw. Two consequences follow, and together they are why `render/drawio.py` does
+not stop at `drawing.layout(algo="kk")`:
+
+- **The algorithm only picks the layout's shape.** Absolute spacing is whatever dividing
+  that one canvas among the nodes happens to give. Any igraph argument that spreads
+  vertices further apart is normalized straight back out by the fit.
+- **Spacing therefore ignores the labels.** The L2 view labels a link end `Gi1/0/23` and
+  the STP view labels the same end `Gi1/0/23 designated/forwarding` — three times the
+  width, in the same space. The STP view is the one that breaks: in the campus example its
+  two closest nodes came out ~157px apart, and icons, node labels and link end labels
+  merged into an unreadable pile.
+
+`_spread_nodes()` scales the finished layout up until the closest pair of nodes is
+`_minimum_node_separation()` apart — one node icon, plus `_LABEL_CLEARANCE` times the width
+of the longest label the diagram carries, because draw.io centers a node's label under its
+icon *and* pins each link end label near that same end, so the gap between two neighbors
+has to hold both nodes' labels and the link end label between them. Deriving it from the
+labels is what lets one rule serve both views: the STP diagrams spread out, the L2 diagrams
+stay compact. The scale is uniform, so the layout igraph computed is preserved exactly.
+
+Kamada-Kawai (`kk`) is kept as the algorithm. The alternatives N2G exposes were compared on
+the campus example and all place the closest pair *worse*: `fr` packs it tighter than `kk`
+at equal canvas size, `drl` collapses a graph this size almost to a point, and `rt` — a
+tree layout on a graph with two cycles in it — flattens the whole thing into rows of
+touching nodes. `kk` is also deterministic here, which keeps the committed example diagrams
+from churning every time they are regenerated.
 
 ### The lucidify post-process
 

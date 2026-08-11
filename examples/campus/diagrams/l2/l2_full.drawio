@@ -6,43 +6,43 @@
           <mxCell id="1" parent="0" />
         <object id="acc-sw1" label="acc-sw1">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="826" y="157" width="120" height="60" as="geometry" />
+          <mxGeometry x="1481" y="282" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="acc-sw2" label="acc-sw2">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="1054" y="650" width="120" height="60" as="geometry" />
+          <mxGeometry x="1890" y="1166" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="acc-sw3" label="acc-sw3">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="534" y="704" width="120" height="60" as="geometry" />
+          <mxGeometry x="958" y="1263" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="core-sw1" label="core-sw1">
       <mxCell style="shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="302" y="221" width="120" height="60" as="geometry" />
+          <mxGeometry x="542" y="396" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="core-sw2" label="core-sw2">
       <mxCell style="shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="728" y="722" width="120" height="60" as="geometry" />
+          <mxGeometry x="1306" y="1295" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="dist-sw1" label="dist-sw1">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="886" y="644" width="120" height="60" as="geometry" />
+          <mxGeometry x="1589" y="1155" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="dist-sw2" label="dist-sw2">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="641" y="864" width="120" height="60" as="geometry" />
+          <mxGeometry x="1150" y="1550" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="edge-rtr" label="edge-rtr">
       <mxCell style="shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="1116" y="406" width="120" height="60" as="geometry" />
+          <mxGeometry x="2002" y="728" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="esxi-host01" label="esxi-host01">
       <mxCell style="shape=mxgraph.cisco.computers_and_peripherals.pc;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="952" y="88" width="120" height="60" as="geometry" />
+          <mxGeometry x="1707" y="158" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="esxi-host02" label="esxi-host02">
       <mxCell style="shape=mxgraph.cisco.computers_and_peripherals.pc;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="1107" y="540" width="120" height="60" as="geometry" />
+          <mxGeometry x="1985" y="969" width="120" height="60" as="geometry" />
       </mxCell>
     </object><mxCell id="2b88ea1c318d66953c0348eac72076ed-src" value="Gi1/0/23" style="labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="2b88ea1c318d66953c0348eac72076ed">
       <mxGeometry x="-0.5" relative="1" as="geometry">

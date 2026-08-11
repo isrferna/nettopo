@@ -496,6 +496,13 @@ render-ready nodes/links. Views never parse text and never write files.
 Use N2G's igraph-backed layout (`kk` default). **`igraph` is a required dependency** —
 without it, layout is skipped and nodes overlap.
 
+N2G fits that layout into one fixed-size canvas, so the algorithm decides only the layout's
+*shape* — the spacing between nodes comes out the same however long their labels are, which
+the STP view's per-end labels (`Gi1/0/3 designated/forwarding`) overflow. `render/drawio.py`
+therefore scales the finished layout up until the closest two nodes have room for the
+longest label the diagram carries, keeping the STP and L2 views legible under one rule. See
+`docs/architecture.md`, "Node spacing".
+
 ### CSV export — `export/csv_export.py`
 
 CSV is a first-class output, not an afterthought: it is both a deliverable and the primary
@@ -611,7 +618,9 @@ out in the PR description.
   blocked link differs), and **same topology, different priority** (must group under
   `topology` but NOT under `strict`).
 - **Views/render** — assert the draw.io XML is well-formed and that expected nodes/links
-  exist; do not assert pixel positions.
+  exist; do not assert pixel positions. Node *spacing* is the exception: how far apart the
+  closest two nodes end up is a property the layout owes the labels, so it is asserted —
+  but still never where any individual node is.
 - **No-network** — see §11.
 
 Coverage target: meaningful coverage on `parsing`, `model`, and `views`; `render` covered
