@@ -53,8 +53,8 @@ returns 404). No rename needed for the v0.1.0 release.
 - draw.io output with **Cisco icons** per device role.
 - **CSV export** of every intermediate table (neighbors, VLANs, STP, HSRP, BGP).
 - Bulk generation into a structured `output/` tree (e.g. `output/stp/`).
-- A **link-label post-process** (`lucidify`) that places each end's label beside its own
-  node and keeps it intact through a Lucidchart import.
+- A **link-label post-process** (`lucidify`) that keeps each end's label attached to its
+  own end of the link and intact through a Lucidchart import.
 
 ### Explicitly out of scope (v1) — YAGNI
 
@@ -471,10 +471,13 @@ render-ready nodes/links. Views never parse text and never write files.
   and stay readable: N2G emits per-end interface labels as child-vertex cells with relative
   geometry, which Lucid mangles, and merging the two ends into one label would run them
   together into a single string — unusable in the STP view, where each end carries its own
-  role/state. `lucidify` detaches each end label into a free-standing text cell with
-  absolute geometry beside its own node, stepping labels aside where a busy node would pile
-  them up, and cleans malformed styles. Applied to every generated diagram by default (a
-  `--no-lucidify` flag can disable it).
+  role/state. N2G's own construct — a label cell parented to the edge, positioned along it
+  by relative geometry — is the right one and is kept: draw.io treats it as that edge's
+  label, so it moves with the link and the Arrange layouts skip it. What N2G gets wrong is
+  writing `relative="-1"` on the target-end label instead of `relative="1"`, which draw.io
+  tolerates but a stricter importer does not; `lucidify` normalizes that flag and cleans
+  malformed styles. Applied to every generated diagram by default (a `--no-lucidify` flag
+  can disable it).
 
 > **Known limitation to validate early (Phase 3):** `mxgraph.cisco.*` shapes are draw.io
 > stencils. On Lucid import they may degrade to plain boxes because Lucid uses a different

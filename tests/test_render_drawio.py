@@ -48,33 +48,38 @@ def test_node_style_reflects_its_role(tmp_path: Path) -> None:
     assert "mxgraph.cisco.routers.router" in router_cell.get("style", "")
 
 
-def test_no_lucidify_leaves_separate_src_trgt_label_cells_in_place(tmp_path: Path) -> None:
+def test_no_lucidify_leaves_n2gs_raw_label_cells_in_place(tmp_path: Path) -> None:
     output_path = tmp_path / "l2.drawio"
     render_diagram(_diagram(), output_path, apply_lucidify=False)
 
     xml_text = output_path.read_text(encoding="utf-8")
     assert 'value="Gi1/0/1"' in xml_text
     assert 'value="Gi0/0/0"' in xml_text
+    assert 'relative="-1"' in xml_text  # the defect lucidify normalizes
 
 
-def test_lucidify_applied_by_default_detaches_end_labels_into_free_standing_cells(
+def test_lucidify_applied_by_default_keeps_end_labels_attached_to_their_link(
     tmp_path: Path,
 ) -> None:
     output_path = tmp_path / "l2.drawio"
     render_diagram(_diagram(), output_path)
 
     root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    link_object = root.find(".//object[@source='sw1'][@target='rtr1']")
+    assert link_object is not None
+    link_id = link_object.get("id")
+
     labels = [cell for cell in root.findall(".//root/mxCell") if cell.get("value")]
     assert {cell.get("value") for cell in labels} == {"Gi1/0/1", "Gi0/0/0"}
 
     for cell in labels:
-        assert cell.get("parent") == "1"
+        assert cell.get("parent") == link_id
         geometry = cell.find("./mxGeometry")
         assert geometry is not None
-        assert geometry.get("relative") is None
-        # Positions come from igraph's layout, so only assert they are real coordinates.
-        for dimension in ("x", "y", "width", "height"):
-            float(geometry.get(dimension, ""))
+        assert geometry.get("relative") == "1"
+
+    # The two ends are never merged into one label on the link itself.
+    assert link_object.get("label") == ""
 
     link_object = root.find(".//object[@source='sw1'][@target='rtr1']")
     assert link_object is not None
