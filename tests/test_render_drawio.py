@@ -57,16 +57,28 @@ def test_no_lucidify_leaves_separate_src_trgt_label_cells_in_place(tmp_path: Pat
     assert 'value="Gi0/0/0"' in xml_text
 
 
-def test_lucidify_applied_by_default_collapses_labels_onto_the_link_object(
+def test_lucidify_applied_by_default_detaches_end_labels_into_free_standing_cells(
     tmp_path: Path,
 ) -> None:
     output_path = tmp_path / "l2.drawio"
     render_diagram(_diagram(), output_path)
 
     root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    labels = [cell for cell in root.findall(".//root/mxCell") if cell.get("value")]
+    assert {cell.get("value") for cell in labels} == {"Gi1/0/1", "Gi0/0/0"}
+
+    for cell in labels:
+        assert cell.get("parent") == "1"
+        geometry = cell.find("./mxGeometry")
+        assert geometry is not None
+        assert geometry.get("relative") is None
+        # Positions come from igraph's layout, so only assert they are real coordinates.
+        for dimension in ("x", "y", "width", "height"):
+            float(geometry.get(dimension, ""))
+
     link_object = root.find(".//object[@source='sw1'][@target='rtr1']")
     assert link_object is not None
-    assert link_object.get("label") == "Gi1/0/1 — Gi0/0/0"
+    assert link_object.get("label") == ""
 
 
 def test_an_empty_diagram_still_renders_valid_xml_without_crashing(tmp_path: Path) -> None:

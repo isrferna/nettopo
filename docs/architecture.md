@@ -483,12 +483,17 @@ igraph-backed `kk` layout, then hands the dumped XML to `lucidify.py` unless
 
 N2G emits each link's per-end interface label (`src_label`/`trgt_label`) as a separate
 child `mxCell` vertex with geometry *relative to the link's own edge cell*
-(`x="-0.5"` near the source, `x="0.5"` near the target). Lucidchart's draw.io importer
-does not handle that relative-geometry child-of-an-edge pattern and mangles or drops
-these labels. `render/lucidify.py` collapses them into a single `label` attribute on the
-edge's own `object` cell instead — an attribute Lucid imports correctly — and removes
-the now-redundant child cells. It also cleans up the doubled semicolons N2G's XML
-templates leave behind in style strings.
+(`x="-0.5"` near the source, `x="0.5"` near the target). That shape causes two problems.
+Lucidchart's draw.io importer does not handle the relative-geometry child-of-an-edge
+pattern and mangles or drops these labels; and folding both ends into one centered label
+runs them together into a single string, which the STP view cannot afford — each end
+there carries its own role/state, so `Po110 designated/forwarding — Po110 root/forwarding`
+tells the reader nothing about which switch is which.
+
+`render/lucidify.py` detaches each end label into a free-standing top-level vertex with
+absolute geometry instead — a plain `text` shape, which Lucid imports correctly — placed
+just outside its own node along the link. It also cleans up the doubled semicolons N2G's
+XML templates leave behind in style strings.
 
 ```mermaid
 flowchart LR
@@ -501,12 +506,25 @@ flowchart LR
     end
     before -- "lucidify_xml()" --> after
     subgraph after["After lucidify (default; --no-lucidify skips this)"]
-        E2["edge object cell<br/>label = 'Gi1/0/1 — Gi1/0/24'<br/>child label cells removed"]
+        E2["edge object cell<br/>(unchanged)"]
+        F1["top-level text cell<br/>absolute x/y beside sw1<br/>value: Gi1/0/1"]
+        F2["top-level text cell<br/>absolute x/y beside sw2<br/>value: Gi1/0/24"]
     end
 ```
 
+Placement is driven off the node boxes, which hold absolute coordinates by this point
+because `render/drawio.py` runs the igraph layout before dumping the XML. Each label sits
+one node-clearance past its own node's boundary along the link, on the opposite side of
+the line from the other end's label — the far end's direction is the near end's negation,
+so that separation falls out of the geometry rather than needing a special case. Two rules
+handle crowding: a label's center never travels more than 45% of the way to the far node,
+so which end it describes stays unambiguous on a short link; and a label that would land on
+an already-placed label or on a node steps further out along the link's normal until it is
+clear, up to a bound, past which staying near the right node wins over not touching
+anything.
+
 Applied to every generated diagram by default; `--no-lucidify` leaves N2G's raw output
-in place (useful for debugging the pre-collapse structure).
+in place (useful for debugging the pre-detach structure).
 
 ### Known limitation to validate early: Cisco icons under Lucid import
 
@@ -515,7 +533,7 @@ against the actual shape names in jgraph/drawio's `Sidebar-Cisco.js` rather than
 guessed. Lucidchart uses a different shape library, so these stencils may still degrade
 to plain boxes on import even with the correct names. Cisco icons are a confirmed
 requirement, so v1 keeps them and accepts this tradeoff; `render/lucidify.py`'s label
-collapsing (above) at least keeps interface labels intact through that import.
+detaching (above) at least keeps interface labels intact through that import.
 
 **Status: implementation complete, live-import validation still pending.** Real
 fidelity against an actual Lucidchart import has not yet been checked by a human with
@@ -532,9 +550,10 @@ this:
 2. Import `/tmp/lucid-check/l2/l2_full.drawio` and one of
    `/tmp/lucid-check/stp/*.drawio` into a Lucidchart document.
 3. Record, here in this section: whether the Cisco device shapes render recognizably or
-   degrade to plain boxes; whether the collapsed link labels (e.g.
-   `Gi1/0/1 — Gi1/0/24`) survived the import; and whether the STP root-highlight border
-   and forwarding/blocking link colors survived.
+   degrade to plain boxes; whether the detached link labels (e.g. `Gi1/0/1` beside one
+   switch and `Gi1/0/24` beside the other) survived the import and stayed next to the
+   right node; and whether the STP root-highlight border and forwarding/blocking link
+   colors survived.
 
 ## Security posture
 

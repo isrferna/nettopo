@@ -53,7 +53,8 @@ returns 404). No rename needed for the v0.1.0 release.
 - draw.io output with **Cisco icons** per device role.
 - **CSV export** of every intermediate table (neighbors, VLANs, STP, HSRP, BGP).
 - Bulk generation into a structured `output/` tree (e.g. `output/stp/`).
-- A **Lucidchart-friendliness post-process** (`lucidify`) applied to link labels.
+- A **link-label post-process** (`lucidify`) that places each end's label beside its own
+  node and keeps it intact through a Lucidchart import.
 
 ### Explicitly out of scope (v1) — YAGNI
 
@@ -466,11 +467,14 @@ render-ready nodes/links. Views never parse text and never write files.
 - `render/icons.py` maps `DeviceRole` → Cisco draw.io shape
   (`shape=mxgraph.cisco.*`), e.g. router, layer-3 switch, workgroup switch, IP phone,
   server, PC.
-- `render/lucidify.py` post-processes the draw.io XML so link labels survive Lucid import:
-  N2G emits per-end interface labels as child-vertex cells with relative geometry, which
-  Lucid mangles; `lucidify` collapses each link's `src`/`trgt` labels into a single label
-  on the link's `<object>` and cleans malformed styles. Applied to every generated diagram
-  by default (a `--no-lucidify` flag can disable it).
+- `render/lucidify.py` post-processes the draw.io XML so link labels survive Lucid import
+  and stay readable: N2G emits per-end interface labels as child-vertex cells with relative
+  geometry, which Lucid mangles, and merging the two ends into one label would run them
+  together into a single string — unusable in the STP view, where each end carries its own
+  role/state. `lucidify` detaches each end label into a free-standing text cell with
+  absolute geometry beside its own node, stepping labels aside where a busy node would pile
+  them up, and cleans malformed styles. Applied to every generated diagram by default (a
+  `--no-lucidify` flag can disable it).
 
 > **Known limitation to validate early (Phase 3):** `mxgraph.cisco.*` shapes are draw.io
 > stencils. On Lucid import they may degrade to plain boxes because Lucid uses a different

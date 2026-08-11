@@ -24,7 +24,9 @@ priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icon
 (`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels,
 `--endpoints all|network-only` filtering and `--link-mode physical|port-channel`
 (MLAG links drawn once per bundle). Output is post-processed by `lucidify` by
-default (`--no-lucidify` to skip it) so link labels survive Lucidchart import.
+default (`--no-lucidify` to skip it), which places each end's label beside its own
+device rather than merging both into one label, and keeps it that way through a
+Lucidchart import.
 `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
@@ -81,7 +83,7 @@ implemented yet.` and exits with status 1 — see [Status](#status)).
 | `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
 | `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
 | `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
-| `--no-lucidify` | flag | off | Skip the Lucidchart-import-friendliness post-process (`render/lucidify.py`) on generated `.drawio` files. Only affects commands that render diagrams (`l2`, `stp`; later `hsrp`, `bgp`, `all`) — `parse` ignores it. |
+| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`; later `hsrp`, `bgp`, `all`) — `parse` ignores it. |
 
 ### `nettopo parse`
 

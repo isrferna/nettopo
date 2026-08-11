@@ -89,6 +89,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Link labels are no longer merged into one string at the middle of the link. `lucidify`
+  now detaches each end's label into its own text cell placed beside the device it belongs
+  to, so a link between two switches that both reported spanning-tree shows
+  `Po110 designated/forwarding` next to one and `Po110 root/forwarding` next to the other,
+  instead of the two concatenated into
+  `Po110 designated/forwarding — Po110 root/forwarding`. The L2 view gets the same
+  treatment for its interface labels. Labels step aside from one another, and from the
+  device icons, where a busy node would otherwise pile them up. `--no-lucidify` still
+  leaves N2G's raw output alone.
 - A bundle is now identified by the *device pair* rather than by the direction its
   members happen to be stored in, so members reported from opposite ends still collapse
   into one link.
