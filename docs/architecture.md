@@ -32,7 +32,7 @@ flowchart LR
     ingest["ingest/<br/>DataSource, FileDataSource,<br/>model_builder.py"] --> model["model/<br/>NetworkModel, grouping fingerprints"]
     parsing["parsing/<br/>one parser per show command"] --> model
     views["views/<br/>l2, stp, hsrp, bgp"] --> model
-    render["render/<br/>drawio, icons, lucidify"] --> views
+    render["render/<br/>drawio, icons, legend, lucidify"] --> views
     render --> model
     export["export/<br/>csv_export"] --> views
     export --> model
@@ -49,9 +49,9 @@ flowchart LR
 |---|---|
 | `ingest/` | Data sources. `base.py` defines the `DataSource` interface; `files.py` implements it over a directory of saved captures; `model_builder.py` wires parser output into a populated `NetworkModel`. |
 | `parsing/` | One parser per `show` command. Returns plain dataclasses/lists — never touches `NetworkModel` directly. |
-| `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP/HSRP fingerprint functions that decide which VLANs render identically. |
+| `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP/HSRP fingerprint functions that decide which VLANs render identically. `platforms.py`: the product-family table that turns a reported chassis into a `DeviceRole`. |
 | `views/` | One module per diagram (`l2`, `stp`; `hsrp`/`bgp` pending). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. |
-| `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco stencil), `lucidify.py` (Lucidchart-import post-process). |
+| `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key), `lucidify.py` (Lucidchart-import post-process). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
 | `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
 | `cli.py` | `argparse` setup and per-command orchestration only — no parsing or rendering logic lives here. |
@@ -228,6 +228,31 @@ CDP platform strings are free text and are not always a hardware model at all (`
 ESXi`), so inferring one would put noise in a column that today only ever holds a parsed
 `show version` value.
 
+### Why the platform string, not capabilities, decides a device's role
+
+`Device.role` starts from the `Router`/`Switch`/`Phone`/`Host` capabilities a neighbor
+advertises over CDP/LLDP, and that source has two limits it cannot get past. It cannot
+separate a router from a multilayer switch, because a Catalyst 9500 advertises
+`Router Switch` and `_ROLE_BY_CAPABILITY` has to commit to one of the two — which is why
+the campus example used to draw both of its core switches as routers. And a device's own
+CDP/LLDP output never reports its own capabilities, so a *source* device has no role at all
+unless some neighbor happens to describe it.
+
+`model/platforms.py` closes both. It matches the reported chassis — `cisco C9500-16X`,
+`N9K-C93180YC-EX`, `cisco ISR4331/K9`, `VMware ESX` — against a table of product families,
+and `_apply_platform_roles()` runs it over every device once both platform sources have
+settled. A fact about the device beats a fact about who saw it, so it wins. Until this
+existed, `DeviceRole.L3_SWITCH`, `FIREWALL`, `AP` and `SERVER` had icons mapped in
+`render/icons.py` that no code path could ever reach.
+
+It lives in `model/` rather than `ingest/` because it is domain knowledge about Cisco
+product names with no dependency on captures, files or parsing — `ingest` importing from
+`model` keeps the arrows pointing inward, where the reverse would not. The table is
+explicitly a heuristic: it classifies `C9300` as an access `SWITCH` and `C9500` as an
+`L3_SWITCH` even though both route, because access-versus-core is the distinction a
+topology drawing needs, and matching is unanchored and case-insensitive because NX-OS
+reports no vendor prefix where IOS does.
+
 ### Why interface-name normalization is centralized
 
 The same physical port can appear as `Gi1/0/1` in one `show` command's output and
@@ -362,7 +387,7 @@ disconnected nodes — which `cli.py` reports as an explicit warning rather than
 the user to notice.
 
 The view draws two kinds of node. A device with a capture comes from its own `StpBridge`.
-A device seen only in a neighbor's output has no bridge data at all, so it is drawn dashed
+A device seen only in a neighbor's output has no bridge data at all, so it is drawn faded
 (`DiagramNode.inferred` -> `render/icons.py`) and labeled with its name alone, and is
 admitted only through a non-Edge port. When such a device is the root, it is highlighted
 only if `Device.chassis_id` — which LLDP alone reports — matches `StpVlan.root_mac`
@@ -474,13 +499,35 @@ separate bundles.
 
 `render/drawio.py` is the only module that imports N2G. If N2G is ever replaced, only
 that module changes — `views/` and `model/` are unaffected because they depend on
-neither N2G nor draw.io concepts. `render/icons.py` maps `DeviceRole` (and, since Phase
-4, a `highlight` flag) to a draw.io style string; `render/drawio.py` turns each
-`DiagramNode`/`DiagramLink` into an `add_node`/`add_link` call, applies N2G's
-igraph-backed `kk` layout, then hands the dumped XML to `lucidify.py` unless
-`--no-lucidify` was passed.
+neither N2G nor draw.io concepts. `render/icons.py` maps `DeviceRole` (plus `highlight`
+and `inferred` flags) to a draw.io style string and the geometry that style needs;
+`render/drawio.py` turns each `DiagramNode`/`DiagramLink` into an `add_node`/`add_link`
+call, applies N2G's igraph-backed `kk` layout, draws the legend, then hands the dumped XML
+to `lucidify.py` unless `--no-lucidify` was passed.
 
-Links are undirected in every view, and `_link_style()` spells `endArrow=none` out on every
+### Why the icons carry their own size, and why marks are fills rather than strokes
+
+The icons are draw.io's `mxgraph.cisco19.*` set, and two of its properties shape
+`render/icons.py` more than any design preference did.
+
+**`strokeColor` is the glyph color.** These shapes paint the icon and its card outline in
+`strokeColor` over a light `fillColor`, which is what makes a per-role palette possible —
+a router is violet, a layer-3 switch deep blue, an access switch teal, an endpoint slate.
+It is also why the two node markings could not stay as they were. Overriding the stroke to
+gold, which is how the old isometric stencils marked the STP root bridge, turns the icon
+into an unreadable monochrome blob; the root is now marked by a gold card fill that leaves
+the glyph alone. And `dashed=1`, which used to mark a device held with no capture, renders
+nothing at all on these shapes — their outline is too thin for a dash pattern to register,
+so an inferred device was drawn identically to a measured one. Fading the whole node
+(`opacity=40`, with an italic label) is what actually reads.
+
+**`aspect=fixed`**, so a node's geometry has to match its icon's native ratio or the
+drawing is stretched. `NodeStyle` therefore carries width and height alongside the style
+string, taken from draw.io's own sidebar and scaled uniformly. `MAX_NODE_WIDTH_PX` is
+derived from that same table rather than restated, because `render/drawio.py`'s spacing
+rule needs the widest node a diagram can contain and the two must not drift apart.
+
+Links are undirected in every view, and `link_style()` spells `endArrow=none` out on every
 one of them rather than leaning on N2G's default. N2G *substitutes* its
 `default_link_style` for whatever style it is handed instead of merging the two, so a link
 that carries a color — which only the STP view sets, for port state — would silently lose
@@ -512,6 +559,17 @@ icon *and* pins each link end label near that same end, so the gap between two n
 has to hold both nodes' labels and the link end label between them. Deriving it from the
 labels is what lets one rule serve both views: the STP diagrams spread out, the L2 diagrams
 stay compact. The scale is uniform, so the layout igraph computed is preserved exactly.
+
+**Why the closest pair and not a typical gap.** Measuring the global minimum has an obvious
+cost: one unusually tight pair drags the whole canvas out with it, and the campus STP
+diagram used to come out mostly whitespace with specks in it. Scaling to the *median*
+nearest-neighbour distance instead was tried and rejected on measurement — in that same
+diagram the nearest-neighbour distances are bimodal (`158, 158, 169, 317, 430, 439, 439`
+px), so the median sits above the separation the labels need and three of seven nodes stay
+close enough to overlap. A diagram larger than it strictly needs to be is a smaller problem
+than one whose labels sit on top of each other. The sparseness was addressed where it
+actually came from instead: `_LABEL_CLEARANCE` dropped from 1.5 to 1.3 now that link end
+labels are set smaller than node labels, and the icons themselves are drawn larger.
 
 Kamada-Kawai (`kk`) is kept as the algorithm. The alternatives N2G exposes were compared on
 the campus example and all place the closest pair *worse*: `fr` packs it tighter than `kk`
@@ -568,24 +626,27 @@ Both labels stay children of their edge either way; only the flag changes. Appli
 generated diagram by default; `--no-lucidify` leaves N2G's raw output in place, including
 the `relative="-1"`.
 
-### Known limitation to validate early: Cisco icons under Lucid import
+### Known limitation: Cisco icons under Lucid import
 
-`render/icons.py` maps device roles to `mxgraph.cisco.*` draw.io stencils, verified
-against the actual shape names in jgraph/drawio's `Sidebar-Cisco.js` rather than
-guessed. Lucidchart uses a different shape library, so these stencils may still degrade
-to plain boxes on import even with the correct names. Cisco icons are a confirmed
-requirement, so v1 keeps them and accepts this tradeoff; `render/lucidify.py`'s label
-`relative` normalization (above) at least gives the interface labels their best
-chance of surviving that import.
+`render/icons.py` maps device roles to `mxgraph.cisco19.*` shapes, verified against the
+actual names in jgraph/drawio's `Sidebar-Cisco19.js` and then rendered through the draw.io
+CLI rather than guessed. Lucidchart uses a different shape library, so these may still
+degrade to plain boxes on import even with the correct names.
+
+**This got worse, deliberately.** The classic `mxgraph.cisco.*` stencils these replaced were
+named stencils an importer could at least look up; a cisco19 icon is drawn by a draw.io
+JavaScript shape (`mxgraph.cisco19.rect` plus a `prIcon` name), which nothing outside
+draw.io implements. The tradeoff was taken with that understood: draw.io is where these
+diagrams are read, edited and exported to PNG, and the visual gain there is large.
+`render/lucidify.py`'s label `relative` normalization (above) still gives the interface
+labels their best chance of surviving an import.
 
 **Status: implementation complete, live-import validation still pending.** Real
 fidelity against an actual Lucidchart import has not yet been checked by a human with
-Lucid access. Phase 4 (STP) proceeded on the same rendering approach without waiting for
-this, since it requires interactive access this project's automation does not have;
-whoever runs the checklist below should treat Phase 3's L2 output and Phase 4's STP
-output (root-highlight and port-state link colors are new draw.io style overrides in
-`render/icons.py`/`render/drawio.py`) as equally unvalidated. Checklist for whoever runs
-this:
+Lucid access, since it requires interactive access this project's automation does not
+have. Everything the renderer emits should be treated as unvalidated there — including the
+root-bridge card fill, the `opacity` fade on uncaptured devices, and the legend, all of
+which are draw.io style overrides. Checklist for whoever runs this:
 
 1. Generate samples:
    `nettopo l2 -i tests/fixtures/captures -o /tmp/lucid-check`
@@ -595,8 +656,10 @@ this:
 3. Record, here in this section: whether the Cisco device shapes render recognizably or
    degrade to plain boxes; whether the per-end link labels (e.g. `Gi1/0/1` at one end of
    the link and `Gi1/0/24` at the other) survived the import and stayed attached to their
-   link; and whether the STP root-highlight border and forwarding/blocking link colors
-   survived.
+   link; whether the root-bridge fill, the inferred-device fade and the
+   forwarding/blocking link colors survived; and whether the legend box arrived intact.
+   If the icons do degrade, the fallback worth costing is embedding SVG icons as
+   `shape=image;image=data:image/svg+xml;base64,…`, which any importer can render.
 
 ## Security posture
 

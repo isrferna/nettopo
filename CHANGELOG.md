@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Device roles are now inferred from the reported chassis (`model/platforms.py`), not only
+  from CDP/LLDP capabilities. A platform string that names a known product family wins,
+  which fixes multilayer switches being drawn as routers (`Router Switch` capabilities
+  forced a choice between the two) and gives a device we hold the capture for a role from
+  its own `show version` instead of depending on a neighbor to describe it. This also
+  reaches the `L3_SWITCH`, `FIREWALL`, `AP` and `SERVER` roles, which had icons mapped but
+  were never assigned. The `role` column in `devices.csv` improves accordingly.
+- Diagrams carry a legend (`render/legend.py`). The L2 view lists every device role it
+  drew; the STP view explains the root bridge, uncaptured devices, and the
+  forwarding/blocking link colors — each only when the diagram actually uses it.
 - `examples/campus/`: a runnable six-switch capture set (ten devices once the
   neighbor-only ones are counted, four VLANs, two distinct spanning trees) covering
   every feature the L2 and STP views implement — port-channels, an uncaptured switch,
@@ -21,14 +31,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture set.
 - `examples/campus/diagrams/`: the generated `.drawio` files themselves, plus white-
   background PNG exports of the four the README embeds, so a reader sees the real Cisco
-  stencils, colors and per-end labels without installing anything. The README documents
+  icons, colors and per-end labels without installing anything. The README documents
   both the `nettopo` commands that write the `.drawio` files and the draw.io CLI
   invocation that exports them.
 - `tests/test_examples_campus.py`, which asserts the facts the README states about that
-  capture set — node/link counts, the two roots and their blocked ports, the dashed
+  capture set — node/link counts, the two roots and their blocked ports, the faded
   uncaptured switch, and each `--group-mode`'s output. Without it, editing an example
   capture or changing a view's output would leave the documented diagrams silently
   wrong.
+
+### Changed
+
+- Device icons are draw.io's modern flat Cisco set (`mxgraph.cisco19.*`) instead of the
+  classic isometric stencils, with a color per role rather than one blue for everything.
+  Note this makes fidelity under a Lucidchart import *less* likely, not more: these icons
+  are drawn by draw.io's own code rather than looked up as named stencils. The tradeoff is
+  deliberate — see the known limitation in `PROJECT_SPEC.md` §8.
+- A device we hold no capture for is now drawn faded with an italic label, replacing the
+  dashed border. On the previous stencils the dash rendered nothing at all, so an inferred
+  device was indistinguishable from a measured one.
+- The STP root bridge is marked with a gold card fill rather than a gold border. On the new
+  icons the stroke color paints the glyph itself, so the old override made the icon
+  unreadable.
+- Link end labels are set smaller and gray on an opaque background, and links with no port
+  state are drawn in soft gray rather than black, so the STP view's colors carry the
+  emphasis.
+- Diagrams are less sparse: node spacing needs less clearance now that end labels are
+  smaller, and the icons themselves are drawn larger. The committed example diagrams are
+  regenerated.
 
 ### Fixed
 

@@ -7,13 +7,15 @@ spelling becomes its own `Device` and one physical switch is drawn as several no
 `utils/hostnames.py` owns that correlation; this module feeds it every observed spelling
 and rewrites each discovered link onto the canonical name it returns.
 
-It also infers `Device.role` from CDP/LLDP capabilities so `render/icons.py` (Phase 3)
-has real data to key off of. A device's own CDP/LLDP output never reports its own
-capabilities, so a source device's role can only come from how its *neighbors* describe
-it. This must run on every raw discovered link, before deduplication: when both ends of
-a link are source devices, deduplication keeps only one direction's `Link` (see
-`links_by_key` below), which would silently discard the only capability report naming
-whichever device ends up on the discarded side.
+It also infers `Device.role` so `render/icons.py` has real data to key off of, from two
+signals in increasing order of authority. CDP/LLDP capabilities come first: a device's own
+CDP/LLDP output never reports its own capabilities, so this can only come from how its
+*neighbors* describe it, and it must run on every raw discovered link, before
+deduplication -- when both ends of a link are source devices, deduplication keeps only one
+direction's `Link` (see `links_by_key` below), which would silently discard the only
+capability report naming whichever device ends up on the discarded side. The reported
+chassis then overrides that guess in `_apply_platform_roles`, once every platform string
+is settled.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from dataclasses import replace
 
 from nettopo.ingest.base import Capture, DataSource
 from nettopo.model.entities import Device, DeviceRole, Interface, Link, NetworkModel, StpVlan
+from nettopo.model.platforms import classify_platform
 from nettopo.parsing.cdp import parse_cdp
 from nettopo.parsing.etherchannel import PortChannelCapture, parse_port_channels
 from nettopo.parsing.interfaces import interface_type, parse_interfaces
@@ -101,7 +104,28 @@ def build_network_model(source: DataSource, *, default_platform: str = "cisco_io
         links_by_key.setdefault(link.key(), link)
 
     model.links = list(links_by_key.values())
+    _apply_platform_roles(model)
     return model
+
+
+def _apply_platform_roles(model: NetworkModel) -> None:
+    """Let the reported chassis override the role capabilities guessed at.
+
+    Runs last, over every device, because it needs `Device.platform` already settled from
+    both sources (`show version` above, neighbor reports in the link loop). It buys two
+    things capabilities alone cannot:
+
+    - A multilayer switch stops being drawn as a router. `Router Switch` is what a
+      Catalyst 9500 advertises, and `_ROLE_BY_CAPABILITY` has to pick one of the two;
+      the chassis name is the tiebreaker that is actually about the device.
+    - A source device gets a role from its *own* `show version`. Until now that role
+      could only come from how some neighbor described it, since a device's CDP/LLDP
+      output never reports its own capabilities.
+    """
+    for device in model.devices.values():
+        role = classify_platform(device.platform)
+        if role is not None:
+            device.role = role
 
 
 def _populate_source_devices(

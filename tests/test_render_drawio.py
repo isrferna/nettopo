@@ -15,7 +15,8 @@ from pathlib import Path
 
 from nettopo.model.entities import DeviceRole
 from nettopo.render.drawio import render_diagram
-from nettopo.views.diagram import Diagram, DiagramLink, DiagramNode
+from nettopo.render.icons import LINK_LABEL_STYLE, node_style
+from nettopo.views.diagram import Diagram, DiagramLink, DiagramNode, LegendEntry
 
 
 def _diagram() -> Diagram:
@@ -49,7 +50,7 @@ def test_node_style_reflects_its_role(tmp_path: Path) -> None:
     root = ET.fromstring(output_path.read_text(encoding="utf-8"))
     router_cell = root.find(".//object[@id='rtr1']/mxCell")
     assert router_cell is not None
-    assert "mxgraph.cisco.routers.router" in router_cell.get("style", "")
+    assert "mxgraph.cisco19.rect;prIcon=router" in router_cell.get("style", "")
 
 
 def test_no_lucidify_leaves_n2gs_raw_label_cells_in_place(tmp_path: Path) -> None:
@@ -103,7 +104,7 @@ def test_creates_parent_directories(tmp_path: Path) -> None:
     assert output_path.exists()
 
 
-def test_highlighted_node_style_carries_the_highlight_color(tmp_path: Path) -> None:
+def test_highlighted_node_style_carries_the_highlight_fill(tmp_path: Path) -> None:
     output_path = tmp_path / "stp.drawio"
     diagram = Diagram(
         nodes=[DiagramNode(id="root", label="root", role=DeviceRole.SWITCH, highlight=True)]
@@ -113,7 +114,7 @@ def test_highlighted_node_style_carries_the_highlight_color(tmp_path: Path) -> N
     root = ET.fromstring(output_path.read_text(encoding="utf-8"))
     node_cell = root.find(".//object[@id='root']/mxCell")
     assert node_cell is not None
-    assert "#FFD700" in node_cell.get("style", "")
+    assert "fillColor=#FFF3C4;" in node_cell.get("style", "")
 
 
 def _colored_link_diagram() -> Diagram:
@@ -219,12 +220,12 @@ def test_the_closest_two_nodes_leave_room_for_the_labels_between_them(tmp_path: 
     # The regression: N2G fits its layout into one fixed-size canvas, which left the STP
     # view's closest nodes ~157px apart -- less than the width of a single
     # "Gi1/0/3 designated/forwarding" label, so icons and labels piled up unreadably.
-    # That label renders about 174px wide, and the gap has to hold two of them: the facing
-    # halves of both nodes' own labels, plus the link end label pinned between them.
+    # The gap has to hold a full-width node icon (120px) plus that end label, which renders
+    # about 136px wide at the size `icons.LINK_LABEL_STYLE` sets.
     output_path = tmp_path / "stp.drawio"
     render_diagram(_ring_diagram("Gi1/0/3 designated/forwarding"), output_path)
 
-    assert _closest_node_pair_distance(output_path) > 2 * 174
+    assert _closest_node_pair_distance(output_path) > 120 + 136
 
 
 def test_long_labels_push_the_nodes_further_apart_than_short_ones(tmp_path: Path) -> None:
@@ -245,3 +246,87 @@ def test_a_single_node_diagram_needs_no_spacing_and_still_renders(tmp_path: Path
 
     root = ET.fromstring(output_path.read_text(encoding="utf-8"))
     assert root.find(".//object[@id='sw1']") is not None
+
+
+def test_nodes_are_sized_to_their_icon_rather_than_n2gs_default(tmp_path: Path) -> None:
+    """cisco19 styles carry `aspect=fixed`, so a mismatched geometry stretches the icon."""
+    output_path = tmp_path / "l2.drawio"
+    render_diagram(_diagram(), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    geometry = root.find(".//object[@id='rtr1']/mxCell/mxGeometry")
+    assert geometry is not None
+    expected = node_style(DeviceRole.ROUTER)
+    assert geometry.get("width") == str(expected.width)
+    assert geometry.get("height") == str(expected.height)
+
+
+def test_link_end_labels_are_set_smaller_than_the_body_text(tmp_path: Path) -> None:
+    """Interface labels sit where links cross, so they get their own compact style."""
+    output_path = tmp_path / "l2.drawio"
+    render_diagram(_diagram(), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    end_labels = [
+        cell for cell in root.iter("mxCell") if cell.get("value") in {"Gi1/0/1", "Gi0/0/0"}
+    ]
+    assert len(end_labels) == 2
+    assert all(LINK_LABEL_STYLE in cell.get("style", "") for cell in end_labels)
+
+
+def _legend_diagram() -> Diagram:
+    diagram = _ring_diagram("Gi1/0/3")
+    diagram.legend = [
+        LegendEntry(label="Root bridge", role=DeviceRole.SWITCH, highlight=True),
+        LegendEntry(label="Blocked at one end", color="#C62828"),
+    ]
+    return diagram
+
+
+def test_the_legend_is_drawn_when_a_view_asks_for_one(tmp_path: Path) -> None:
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_legend_diagram(), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    labels = {cell.get("value") for cell in root.iter("mxCell")}
+    assert {"Legend", "Root bridge", "Blocked at one end"} <= labels
+    # The blocking swatch has to carry the color the links themselves were drawn in.
+    assert any("#C62828" in cell.get("style", "") for cell in root.iter("mxCell"))
+
+
+def test_a_diagram_with_no_legend_entries_gets_no_legend_box(tmp_path: Path) -> None:
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_ring_diagram("Gi1/0/3"), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    assert "Legend" not in {cell.get("value") for cell in root.iter("mxCell")}
+
+
+def test_the_legend_is_not_counted_as_a_link(tmp_path: Path) -> None:
+    """A swatch is drawn as a filled bar, so anything counting edges still sees five."""
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_legend_diagram(), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    assert len(root.findall(".//mxCell[@edge='1']")) == 5
+
+
+def test_the_legend_sits_clear_of_every_node(tmp_path: Path) -> None:
+    """It is added after the spread, so the scaling must not have dragged it into them."""
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_legend_diagram(), output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    box = root.find(".//mxCell[@id='legend']/mxGeometry")
+    assert box is not None
+    legend_bottom = float(box.get("y", 0)) + float(box.get("height", 0))
+
+    node_tops = []
+    for node_object in root.findall(".//object"):
+        cell = node_object.find("./mxCell")
+        if cell is None or cell.get("edge") == "1":
+            continue
+        geometry = cell.find("./mxGeometry")
+        if geometry is not None and geometry.get("x") is not None:
+            node_tops.append(float(geometry.get("y", 0)))
+    assert legend_bottom < min(node_tops)

@@ -13,14 +13,12 @@ from xml.etree.ElementTree import Element
 
 from N2G import drawio_diagram
 
-from nettopo.render.icons import style_for_role
+from nettopo.render.icons import LINK_LABEL_STYLE, MAX_NODE_WIDTH_PX, link_style, node_style
+from nettopo.render.legend import add_legend
 from nettopo.render.lucidify import lucidify_xml
 from nettopo.views.diagram import Diagram, DiagramLink
 
 _DIAGRAM_ID = "diagram_1"
-
-# Every node N2G draws is this wide; two nodes any closer have overlapping icons.
-_NODE_WIDTH_PX = 120
 
 # Width of one character in draw.io's default label font, measured off an export.
 _LABEL_CHARACTER_WIDTH_PX = 6
@@ -29,7 +27,10 @@ _LABEL_CHARACTER_WIDTH_PX = 6
 # the icons themselves. More than one is needed because draw.io centers a node's label
 # under its icon *and* pins each link end label near that same end, so the gap between two
 # neighbors has to hold both nodes' labels and the link end label sitting between them.
-_LABEL_CLEARANCE = 1.5
+# Tuned down from 1.5 against the campus example's exported PNGs: link end labels are now
+# set several points smaller than node labels (`icons.LINK_LABEL_STYLE`), so the same gap
+# holds more, and the diagram no longer needs to be as sparse to stay readable.
+_LABEL_CLEARANCE = 1.3
 
 
 def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool = True) -> None:
@@ -42,8 +43,14 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
     drawing.add_diagram(_DIAGRAM_ID)
 
     for node in diagram.nodes:
-        style = style_for_role(node.role, highlight=node.highlight, inferred=node.inferred)
-        drawing.add_node(id=node.id, label=node.label, style=style)
+        style = node_style(node.role, highlight=node.highlight, inferred=node.inferred)
+        drawing.add_node(
+            id=node.id,
+            label=node.label,
+            style=style.style,
+            width=style.width,
+            height=style.height,
+        )
 
     for link in diagram.links:
         drawing.add_link(
@@ -52,7 +59,9 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
             label=link.label,
             src_label=link.src_label,
             trgt_label=link.trgt_label,
-            style=_link_style(link.color),
+            style=link_style(link.color),
+            src_label_style=LINK_LABEL_STYLE,
+            trgt_label_style=LINK_LABEL_STYLE,
             data=_link_data(link),
         )
 
@@ -62,6 +71,9 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
     if diagram.nodes:
         drawing.layout(algo="kk")
         _spread_nodes(drawing, _minimum_node_separation(diagram))
+        # After the spread, so the legend is placed against the final node positions and
+        # is not itself scaled by it.
+        add_legend(drawing.current_root, diagram.legend, _top_left(drawing))
 
     xml_text = drawing.dump_xml()
     if apply_lucidify:
@@ -75,16 +87,16 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
 
 
 def _minimum_node_separation(diagram: Diagram) -> float:
-    """Pixels the two closest nodes need between them for the diagram's labels to fit.
+    """Pixels two neighboring nodes need between them for the diagram's labels to fit.
 
     Derived from the longest label the diagram actually carries, because that is what
     varies between views: the STP view labels a link end "Gi1/0/23 designated/forwarding"
     where the L2 view says "Gi1/0/23", and a spacing that suits the second is unreadable
-    for the first. The node icon's own width is the floor, for a diagram whose labels are
-    all short.
+    for the first. The widest node icon is the floor, for a diagram whose labels are all
+    short.
     """
     longest_label = max(len(text) for text in _label_texts(diagram))
-    return _NODE_WIDTH_PX + _LABEL_CLEARANCE * longest_label * _LABEL_CHARACTER_WIDTH_PX
+    return MAX_NODE_WIDTH_PX + _LABEL_CLEARANCE * longest_label * _LABEL_CHARACTER_WIDTH_PX
 
 
 def _label_texts(diagram: Diagram) -> list[str]:
@@ -102,6 +114,14 @@ def _spread_nodes(drawing: drawio_diagram, minimum_separation: float) -> None:
     whatever that one canvas size happens to give, and igraph's own spacing arguments are
     normalized away by the fit. Scaling the result afterwards is therefore the only lever
     on spacing in pixels, and being uniform it preserves the layout igraph computed.
+
+    The measurement is the *closest* pair in the graph, not a typical gap. Scaling to the
+    typical gap is tempting, since a force-directed layout routinely leaves one pair much
+    tighter than the rest and the whole canvas grows to serve it -- but in this project's
+    own STP example that leaves three of seven nodes at roughly half the separation their
+    labels need, overlapping. A diagram that is larger than it strictly has to be is a
+    smaller problem than one whose labels sit on top of each other, so every pair is made
+    to fit.
 
     Kamada-Kawai ("kk") is kept as the algorithm: of the alternatives N2G offers, "fr"
     packs the closest pair tighter, "drl" collapses this size of graph almost to a point,
@@ -121,6 +141,17 @@ def _spread_nodes(drawing: drawio_diagram, minimum_separation: float) -> None:
         geometry.set("y", str(round(y_coord * scale)))
 
 
+def _top_left(drawing: drawio_diagram) -> tuple[float, float]:
+    """Top-left corner of the bounding box the laid-out nodes occupy."""
+    geometries = _node_geometries(drawing)
+    if not geometries:
+        return (0.0, 0.0)
+    return (
+        min(float(geometry.get("x", 0)) for geometry in geometries),
+        min(float(geometry.get("y", 0)) for geometry in geometries),
+    )
+
+
 def _node_geometries(drawing: drawio_diagram) -> list[Element]:
     """The `mxGeometry` of every node in the current diagram, in document order.
 
@@ -136,21 +167,6 @@ def _node_geometries(drawing: drawio_diagram) -> list[Element]:
         if geometry is not None:
             geometries.append(geometry)
     return geometries
-
-
-def _link_style(color: str | None) -> str:
-    """Return the draw.io style for a link, colored by `color` when there is one.
-
-    Spells out `endArrow=none` even though it repeats N2G's own default: N2G *substitutes*
-    its default for the style we pass rather than merging the two, so a colored link would
-    otherwise lose it and pick up draw.io's built-in arrowhead. Links are undirected in
-    every view -- the STP view orders an edge's ends by device name, so an arrow would
-    point somewhere that means nothing.
-    """
-    style = "endArrow=none;"
-    if color is not None:
-        style += f"strokeColor={color};strokeWidth=2;"
-    return style
 
 
 def _link_data(link: DiagramLink) -> dict[str, str]:
