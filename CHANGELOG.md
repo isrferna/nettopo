@@ -5,9 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-08-11
 
-Phase 5: HSRP.
+Phase 5: HSRP. `nettopo hsrp` becomes the fourth real command, rendering per-VLAN
+first-hop-redundancy diagrams, and `hsrp.csv` stops being header-only. Nothing existing
+changes shape: the L2 and STP views, their filenames and every other CSV table are
+untouched.
 
 ### Added
 
