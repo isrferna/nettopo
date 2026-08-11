@@ -70,6 +70,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Link labels came loose from their links in `0.3.0rc4`.** That release placed each end
+  label as a free-standing text cell on the canvas, which draw.io reads as a *node*: any
+  Arrange layout (Circle, Tree, Organic) laid the labels out along with the devices,
+  scattering every label away from the link it belonged to. Labels are back to being
+  children of their edge, which is what makes draw.io treat them as edge labels — they move
+  with the link and the Arrange layouts leave them alone. They are still one label per end;
+  only the attachment changed.
 - **The STP view drew no links at all on any network whose switches are joined by
   port-channels.** Nodes rendered, the root was highlighted, and not one line appeared
   between them. `show spanning-tree` reports a bundle as a single logical port (`Po1`)
@@ -89,15 +96,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Link labels are no longer merged into one string at the middle of the link. `lucidify`
-  now detaches each end's label into its own text cell placed beside the device it belongs
-  to, so a link between two switches that both reported spanning-tree shows
-  `Po110 designated/forwarding` next to one and `Po110 root/forwarding` next to the other,
-  instead of the two concatenated into
+- Link labels are no longer merged into one string at the middle of the link. Each end
+  keeps its own label at its own end, so a link between two switches that both reported
+  spanning-tree shows `Po110 designated/forwarding` at one end and `Po110 root/forwarding`
+  at the other, instead of the two concatenated into
   `Po110 designated/forwarding — Po110 root/forwarding`. The L2 view gets the same
-  treatment for its interface labels. Labels step aside from one another, and from the
-  device icons, where a busy node would otherwise pile them up. `--no-lucidify` still
-  leaves N2G's raw output alone.
+  treatment for its interface labels. `lucidify` now leaves N2G's label cells parented to
+  their edge and only normalizes the `relative` flag N2G writes as `-1` on the target end,
+  which draw.io tolerates but a stricter importer reads as "not relative at all".
+  `--no-lucidify` still leaves N2G's raw output alone.
 - A bundle is now identified by the *device pair* rather than by the direction its
   members happen to be stored in, so members reported from opposite ends still collapse
   into one link.

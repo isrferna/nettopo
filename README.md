@@ -24,9 +24,9 @@ priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icon
 (`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels,
 `--endpoints all|network-only` filtering and `--link-mode physical|port-channel`
 (MLAG links drawn once per bundle). Output is post-processed by `lucidify` by
-default (`--no-lucidify` to skip it), which places each end's label beside its own
-device rather than merging both into one label, and keeps it that way through a
-Lucidchart import.
+default (`--no-lucidify` to skip it), which keeps each end's label attached to its own
+end of the link rather than merging both into one, and normalizes the geometry flag N2G
+gets wrong so the labels survive a Lucidchart import.
 `hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
