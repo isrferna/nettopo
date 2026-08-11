@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-11
+
+Neighbor identity resolution, port-channel awareness, and the STP view working against
+real captures. Supersedes the `0.3.0rc1`..`0.3.0rc6` pre-releases; the entries below
+cover everything that changed since `0.2.0`.
+
 ### Added
 
 - `nettopo l2 --link-mode physical|port-channel`. `port-channel` draws one link per
@@ -45,7 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cisco_nxos` template does read it. Both spellings (`Management`/`Mgmt address(es)`,
   `IP address`/`IPv4 Address`) are now handled, with the template's value kept as a
   fallback for neighbors that advertise no management address.
-
 - `nettopo --version` prints the installed version and exits. The string comes from the
   installed distribution's metadata (the same source as `nettopo.__version__`), so it
   cannot drift from `pyproject.toml` — but it does need `pip install -e .` re-run after a
@@ -67,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already reported) and warns when a diagram has several nodes and no links at all. Each
   dropped link is logged at DEBUG with the reason and the resolved port names, which
   distinguishes a missing bundle table from a VLAN that is simply not allowed on a trunk.
+- `Device.serial`, populated from a source device's own `show version` or recovered from
+  the serial an NX-OS neighbor advertises inside its name, and exported as a new column
+  in `devices.csv`.
 
 ### Fixed
 
@@ -102,32 +110,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whitespace where IOS glues the reason directly onto the state. The bridge was still
   created, so the effect was the same silent one as above: a node with no link through
   that port. `StpState.BKN` is new, and a broken port now colors its link as blocking.
-
-### Changed
-
-- Link labels are no longer merged into one string at the middle of the link. Each end
-  keeps its own label at its own end, so a link between two switches that both reported
-  spanning-tree shows `Po110 designated/forwarding` at one end and `Po110 root/forwarding`
-  at the other, instead of the two concatenated into
-  `Po110 designated/forwarding — Po110 root/forwarding`. The L2 view gets the same
-  treatment for its interface labels. `lucidify` now leaves N2G's label cells parented to
-  their edge and only normalizes the `relative` flag N2G writes as `-1` on the target end,
-  which draw.io tolerates but a stricter importer reads as "not relative at all".
-  `--no-lucidify` still leaves N2G's raw output alone.
-- A bundle is now identified by the *device pair* rather than by the direction its
-  members happen to be stored in, so members reported from opposite ends still collapse
-  into one link.
-- `NetworkModel.port_channel_name()` replaces the L2 view's private bundle resolver, which
-  the STP view needed as well; `Link.oriented()` likewise replaces the copy each view kept
-  of the same re-pointing logic.
-
-## [0.3.0rc1] - 2026-08-10
-
-Release candidate: neighbor identity resolution. Pre-releases are not installed by
-`pip` unless asked for — `pip install --pre nettopo` or `pip install nettopo==0.3.0rc1`.
-
-### Fixed
-
 - A device reported under different names by CDP and LLDP is no longer split into
   several nodes. NX-OS advertises its name with the chassis serial appended
   (`nxos-core1(FDO21120U5D)`, by default as its CDP device id) where the other protocol
@@ -150,11 +132,23 @@ Release candidate: neighbor identity resolution. Pre-releases are not installed 
   hardcoded. It had been left at the Phase 0 scaffolding's `0.0.1` through v0.1.0 and
   v0.2.0, disagreeing with `pyproject.toml` and therefore with what was on PyPI.
 
-### Added
+### Changed
 
-- `Device.serial`, populated from a source device's own `show version` or recovered from
-  the serial an NX-OS neighbor advertises inside its name, and exported as a new column
-  in `devices.csv`.
+- Link labels are no longer merged into one string at the middle of the link. Each end
+  keeps its own label at its own end, so a link between two switches that both reported
+  spanning-tree shows `Po110 designated/forwarding` at one end and `Po110 root/forwarding`
+  at the other, instead of the two concatenated into
+  `Po110 designated/forwarding — Po110 root/forwarding`. The L2 view gets the same
+  treatment for its interface labels. `lucidify` now leaves N2G's label cells parented to
+  their edge and only normalizes the `relative` flag N2G writes as `-1` on the target end,
+  which draw.io tolerates but a stricter importer reads as "not relative at all".
+  `--no-lucidify` still leaves N2G's raw output alone.
+- A bundle is now identified by the *device pair* rather than by the direction its
+  members happen to be stored in, so members reported from opposite ends still collapse
+  into one link.
+- `NetworkModel.port_channel_name()` replaces the L2 view's private bundle resolver, which
+  the STP view needed as well; `Link.oriented()` likewise replaces the copy each view kept
+  of the same re-pointing logic.
 
 ## [0.2.0] - 2026-08-07
 
