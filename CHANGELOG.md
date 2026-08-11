@@ -5,6 +5,61 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-11
+
+Phase 5: HSRP. `nettopo hsrp` becomes the fourth real command, rendering per-VLAN
+first-hop-redundancy diagrams, and `hsrp.csv` stops being header-only. Nothing existing
+changes shape: the L2 and STP views, their filenames and every other CSV table are
+untouched.
+
+### Added
+
+- Phase 5 HSRP parsing: `parsing/hsrp.py` reads `show standby brief` through
+  ntc-templates and populates `NetworkModel.hsrp` — one `HsrpGroup` per `(vlan, group)`,
+  carrying the virtual IP and each member's SVI, priority, role and preempt flag.
+  IOS and IOS-XE print the command identically and share the one template;
+  `tests/fixtures/hsrp/` carries a fixture for each.
+- Phase 5 HSRP view: `views/hsrp.py` builds one render-ready `Diagram` per VLAN, or per
+  matching group under `--group-mode`. Each HSRP group is drawn as a **virtual gateway**
+  node — the address hosts actually point at — with one link to every router that offers
+  it, labeled with that router's SVI, role and priority and colored green for active,
+  amber for standby. The active router is highlighted. Each router node also carries its
+  **own** SVI address in that VLAN beside the virtual one, so both halves of the first hop
+  are on the page; that address comes from `show ip interface brief`/`show interfaces`,
+  because `show standby brief` names only the active and standby routers by address and a
+  merely listening member appears in it nowhere. A capture with neither command leaves the
+  node labeled with its name alone. Several groups on one SVI (two gateways load-sharing a
+  VLAN) share a diagram.
+- `nettopo hsrp -i <dir> [--vlan N | --group-mode per-vlan|strict|topology] [--all]` is
+  real, writing `output/hsrp/hsrp_vlan10.drawio` (or `hsrp_vlans-10_20.drawio` for a
+  group) on the same naming rule as `stp`.
+- `hsrp.csv` is populated: one row per member, with the group's virtual IP alongside the
+  member's SVI, priority, role and preempt flag.
+- `utils/interfaces.py` gains `svi_vlan()`, which reads the VLAN id back out of an SVI
+  name. Reading a VLAN out of `Vl10` is a property of the naming rule, so it belongs to
+  the module that owns it rather than to whichever parser needs it.
+- `HsrpRole.LEARN`, the one HSRP state the enum was missing. A member reported in it
+  would otherwise have been dropped.
+- The `examples/campus/` core pair now runs HSRP on VLANs 10/20/30, aligned with the
+  spanning trees (`core-sw1` active where it is root, `core-sw2` for VLAN 30), with
+  VLAN 20's priorities offset so `--group-mode strict` and `topology` differ here too.
+  The generated diagrams are committed under `examples/campus/diagrams/hsrp/` and the
+  README embeds one.
+- `examples/hsrp-quad/`: four layer-3 switches sharing one HSRP group on VLAN 50 — active,
+  standby and **two listening** — for the shape the campus set's gateway pair cannot show.
+  It is also what demonstrates where the node addresses come from: `show standby brief`
+  names the active and standby routers by address and nobody else, so the two listeners'
+  addresses appear in no HSRP output anywhere in that capture set. Documented in
+  `examples/README.md`, embedded in the README, and pinned by
+  `tests/test_examples_hsrp_quad.py`.
+
+### Changed
+
+- The two per-VLAN views now share their result type and filename rule
+  (`views/diagram.py`'s `VlanDiagramGroup` and `vlan_diagram_filename()`), and `cli.py`
+  drives both through one handler. `views/stp.py`'s `StpDiagramGroup` is now
+  `VlanDiagramGroup`; `stp_output_filename()` is unchanged.
+
 ## [0.4.0] - 2026-08-11
 
 Device roles inferred from the reported chassis, a modern Cisco icon set, and a legend

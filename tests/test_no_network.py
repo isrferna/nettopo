@@ -15,6 +15,7 @@ import pytest
 from nettopo.cli import main
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
+HSRP_TOPOLOGY = Path(__file__).parent / "fixtures" / "hsrp_topology"
 
 
 def _deny_all_sockets(*_args: object, **_kwargs: object) -> None:
@@ -55,3 +56,14 @@ def test_stp_command_makes_zero_network_connections(
 
     assert exit_code == 0
     assert (tmp_path / "output" / "stp" / "stp_vlan10.drawio").exists()
+
+
+def test_hsrp_command_makes_zero_network_connections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(socket, "socket", _deny_all_sockets)
+
+    exit_code = main(["hsrp", "-i", str(HSRP_TOPOLOGY), "-o", str(tmp_path / "output"), "--all"])
+
+    assert exit_code == 0
+    assert (tmp_path / "output" / "hsrp" / "hsrp_vlan10.drawio").exists()

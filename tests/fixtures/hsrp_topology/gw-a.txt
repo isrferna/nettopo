@@ -1,0 +1,30 @@
+gw-a#show version
+Cisco IOS Software, IOSv Software (VIOS-ADVENTERPRISEK9-M), Version 15.6(2)T, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2016 by Cisco Systems, Inc.
+
+gw-a uptime is 1 week, 2 days, 3 hours, 4 minutes
+System returned to ROM by power-on
+System image file is "flash:vios-adventerprisek9-m"
+
+cisco C9500-16X (X86) processor with 1867264K/6147K bytes of memory.
+Processor board ID FCW2445L0AA
+2 Gigabit Ethernet interfaces
+Configuration register is 0x0
+
+gw-a#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan10                 10.0.10.2       YES manual up                    up
+Vlan20                 10.0.20.2       YES manual up                    up
+Vlan30                 10.0.30.2       YES manual up                    up
+Vlan40                 10.0.40.2       YES manual up                    up
+
+gw-a#show standby brief
+                     P indicates configured to preempt.
+                     |
+Interface   Grp  Pri P State    Active          Standby         Virtual IP
+Vl10        10   150 P Active   local           10.0.10.3       10.0.10.1
+Vl20        20   140 P Active   local           10.0.20.3       10.0.20.1
+Vl30        30   100 P Standby  10.0.30.3       local           10.0.30.1
+Vl40        40   150 P Active   local           10.0.40.3       10.0.40.1
+Vl40        41   90  P Standby  10.0.40.3       local           10.0.40.254

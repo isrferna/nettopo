@@ -56,6 +56,7 @@ class HsrpRole(Enum):
     LISTEN = "listen"
     INIT = "init"
     SPEAK = "speak"
+    LEARN = "learn"
 
 
 class BgpType(Enum):

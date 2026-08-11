@@ -7,18 +7,18 @@ rule in [`CLAUDE.md`](../CLAUDE.md). For scope, the full data model, and the CLI
 reference, see [`PROJECT_SPEC.md`](../PROJECT_SPEC.md); for user-facing command/option
 docs, see the [README](../README.md#usage).
 
-## Current state (Phase 4)
+## Current state (Phase 5)
 
 | Command | Status | Reads | Writes |
 |---|---|---|---|
 | `nettopo parse` | real | every capture | `output/csv/*.csv` |
 | `nettopo l2` | real | CDP/LLDP, interfaces | `output/l2/*.drawio` |
 | `nettopo stp` | real | `show spanning-tree` | `output/stp/*.drawio`, `stp.csv` rows |
-| `nettopo hsrp` | argument parsing only | — | exits 1, "not implemented yet" |
+| `nettopo hsrp` | real | `show standby brief` | `output/hsrp/*.drawio`, `hsrp.csv` rows |
 | `nettopo bgp` | argument parsing only | — | exits 1, "not implemented yet" |
 | `nettopo all` | argument parsing only | — | exits 1, "not implemented yet" |
 
-`hsrp`/`bgp`/`all` land in Phases 5–7 (`PROJECT_SPEC.md` §14). The rest of this document
+`bgp`/`all` land in Phases 6–7 (`PROJECT_SPEC.md` §14). The rest of this document
 describes both what exists today and the target architecture those phases build into.
 
 ## System overview
@@ -50,7 +50,7 @@ flowchart LR
 | `ingest/` | Data sources. `base.py` defines the `DataSource` interface; `files.py` implements it over a directory of saved captures; `model_builder.py` wires parser output into a populated `NetworkModel`. |
 | `parsing/` | One parser per `show` command. Returns plain dataclasses/lists — never touches `NetworkModel` directly. |
 | `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP/HSRP fingerprint functions that decide which VLANs render identically. `platforms.py`: the product-family table that turns a reported chassis into a `DeviceRole`. |
-| `views/` | One module per diagram (`l2`, `stp`; `hsrp`/`bgp` pending). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. |
+| `views/` | One module per diagram (`l2`, `stp`, `hsrp`; `bgp` pending). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
 | `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key), `lucidify.py` (Lucidchart-import post-process). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
 | `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
@@ -117,8 +117,8 @@ sequenceDiagram
         STP->>GRP: stp_fingerprint(stp_vlan, TOPOLOGY)
         GRP-->>STP: fingerprint tuple
     end
-    Note over STP: VLANs sharing a fingerprint become one StpDiagramGroup
-    STP-->>CLI: list of StpDiagramGroup
+    Note over STP: VLANs sharing a fingerprint become one VlanDiagramGroup
+    STP-->>CLI: list of VlanDiagramGroup
     loop each group
         CLI->>DIO: render_diagram(group.diagram, output_path)
         DIO->>N2G: add_node(style) / add_link(style) / layout(kk)
@@ -290,7 +290,7 @@ command matches a pattern and returns just that command's output slice.
 | `show lldp neighbors detail` | `parsing/lldp.py` | ntc-templates | raw `Link`s (`discovery="lldp"`, see below), plus the neighbor's chassis MAC (`Device.chassis_id`), which CDP never reports |
 | `show etherchannel summary`, `show port-channel summary` | `parsing/etherchannel.py` | ntc-templates (see below) | `Interface.po_id`, `Interface.po_members` |
 | `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) — and, when links are bundled, needs `show etherchannel summary` alongside it for the STP view to resolve `Po1` onto its members |
-| `show standby brief` | `parsing/hsrp.py` | not yet implemented | — (Phase 5) |
+| `show standby brief` | `parsing/hsrp.py` | ntc-templates | `NetworkModel.hsrp` (`HsrpGroup`, `HsrpMember`) |
 | `show ip bgp summary` | `parsing/bgp.py` | not yet implemented | — (Phase 6) |
 
 All ntc-templates-backed parsers go through `parsing/_textfsm.py`, a thin typed wrapper
@@ -442,7 +442,7 @@ parsed captures in `tests/test_views_stp.py` and `tests/fixtures/stp_topology/`.
 |---|---|---|---|---|
 | L2 | `views/l2.py` | `model.devices`, `model.links` | `--endpoints all\|network-only`, `--link-mode physical\|port-channel` | one `Diagram` |
 | STP | `views/stp.py` | `model.stp`, `model.links`, `model.devices` | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per topology group |
-| HSRP | `views/hsrp.py` | — | — | not yet implemented (Phase 5) |
+| HSRP | `views/hsrp.py` | `model.hsrp`, `model.devices` (for each member's SVI address) | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per matching group |
 | BGP | `views/bgp.py` | — | — | not yet implemented (Phase 6) |
 
 ### Why the STP view cross-references `model.links`
@@ -456,6 +456,48 @@ for that VLAN (e.g. a link outside the VLAN's spanning tree) is excluded. Root-b
 highlighting and port-state link coloring are carried on the `Diagram` itself
 (`DiagramNode.highlight`, `DiagramLink.color`) so `render/` can apply them as generic
 style overrides without knowing anything about STP.
+
+### Why the HSRP view draws a star and not a topology
+
+The STP view's whole difficulty is that `show spanning-tree` never names the device on the
+other end of a port, so the view has to join port state onto a CDP/LLDP topology. The HSRP
+view has no equivalent problem, because it has no equivalent question: HSRP is not a
+topology. `show standby brief` says which routers share a virtual IP and which of them is
+currently active, and the segment they share is a broadcast domain rather than a set of
+point-to-point links. Drawing the cables between the gateways would be redrawing the L2 or
+STP diagram with fewer nodes.
+
+So `views/hsrp.py` never reads `model.links`. Each HSRP group becomes a **virtual gateway
+node** — the address hosts are actually configured with — and each member router gets one
+link to it, labeled with that router's SVI, role and priority and colored green for active
+or amber for standby. The gateway node is deliberately `DeviceRole.UNKNOWN`, which
+`render/icons.py` draws as a plain box: it is an address, not a device, and giving it a
+Cisco icon would say otherwise. Its id is namespaced (`hsrp:vlan10:group10`) so it cannot
+collide with a member node, which is keyed by hostname.
+
+**Where each member's own address comes from.** A router node is labeled with the address
+its SVI holds in that VLAN, beside the group's virtual one, because that is what identifies
+the box behind a traceroute hop or a ping reply. `show standby brief` cannot supply it:
+its Active and Standby columns name those two routers by address and no one else, so in a
+group with four members the two that are merely listening have no address anywhere in that
+output. The view therefore reads `Device.interfaces[svi].ip_address`, populated by
+`parsing/interfaces.py` from `show ip interface brief`/`show interfaces` — data the model
+already held, joined rather than re-parsed. A capture with neither command leaves the node
+labeled with its name alone. Any of a router's members supplies the SVI name to look up:
+a diagram covers one VLAN, so every group in it sits on that VLAN's single SVI.
+
+A diagram covers one VLAN and **every** group on it, because one SVI can carry several
+(two gateways load-sharing a VLAN, each active for one group). That also fixes the unit of
+grouping: `model/grouping.py` fingerprints one `HsrpGroup`, and the view compares two VLANs
+by their groups' fingerprints in group-number order, so VLANs group together only when
+their entire first-hop setup matches group for group.
+
+Grouped diagrams render one representative VLAN, exactly as the STP view does — but with
+one extra obligation. The virtual IP and the SVI name are precisely the two things that
+*must* differ between VLANs grouped under `strict` or `topology`, and the virtual IP is
+the headline fact of the whole diagram. So the gateway node names the VLAN it was drawn
+from (`VLAN 10 group 10` above `10.10.10.1`): a diagram that says which VLAN its address
+belongs to cannot be misread as claiming that address for every VLAN in the filename.
 
 ### Why grouped STP diagrams render one representative VLAN
 
@@ -667,16 +709,18 @@ which are draw.io style overrides. Checklist for whoever runs this:
 and writes local output files. `tests/test_no_network.py` enforces this by
 monkeypatching `socket.socket` to fail and asserting a full run still succeeds; Phase 3
 extends the base `parse`-only test to cover `nettopo l2` now that it pulls in
-N2G/igraph, Phase 4 extends it again to cover `nettopo stp`, and it will extend further
-to cover `nettopo all` once Phase 7 adds that command.
+N2G/igraph, Phase 4 extends it again to cover `nettopo stp`, Phase 5 again for
+`nettopo hsrp`, and it will extend further to cover `nettopo all` once Phase 7 adds that
+command.
 
 `utils/paths.py`'s `resolve_output_root()` is used by every command to resolve `-o`/
 `--output` to an absolute path before anything is written. Its `sanitize_filename_component()`
 and `safe_join()` guard against a filename derived from parsed data (e.g. a hostname
 like `../../etc`) escaping the output directory; today's real output filenames don't
-yet need them in practice — `l2`'s two filenames are a fixed lookup table and `stp`'s
-are built from VLAN ids, which are ints parsed out of the model rather than arbitrary
-path input, so they can't contain a path separator — but the helpers are unit-tested
+yet need them in practice — `l2`'s two filenames are a fixed lookup table, and `stp`'s
+and `hsrp`'s come from the same `vlan_diagram_filename()` over VLAN ids, which are ints
+parsed out of the model rather than arbitrary path input, so they can't contain a path
+separator — but the helpers are unit-tested
 (`tests/test_paths.py`) and ready for the day a filename is built from a raw string like
 a hostname. `export/csv_export.py` separately neutralizes *cell* values that start with
 a formula-triggering character (`=`, `+`, `-`, `@`) so a hostname or description can't

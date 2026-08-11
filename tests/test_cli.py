@@ -11,10 +11,11 @@ import pytest
 from nettopo.cli import build_parser, main
 
 ALL_COMMANDS = {"parse", "l2", "stp", "hsrp", "bgp", "all"}
-UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp"}
+UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp", "hsrp"}
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
 STP_TOPOLOGY = Path(__file__).parent / "fixtures" / "stp_topology"
+HSRP_TOPOLOGY = Path(__file__).parent / "fixtures" / "hsrp_topology"
 PORT_CHANNEL = Path(__file__).parent / "fixtures" / "captures_portchannel"
 STP_PORT_CHANNEL = Path(__file__).parent / "fixtures" / "stp_portchannel"
 
@@ -183,3 +184,71 @@ def test_stp_diagram_draws_one_link_per_bundle_not_per_member(tmp_path: Path) ->
     assert exit_code == 0
     # Po1 (two members, collapsed) plus the single physical link up to the uncaptured core.
     assert _link_count(output_dir / "stp" / "stp_vlan10.drawio") == 2
+
+
+def test_hsrp_command_requires_either_vlan_or_all(tmp_path: Path) -> None:
+    exit_code = main(["hsrp", "-i", str(HSRP_TOPOLOGY), "-o", str(tmp_path / "output")])
+    assert exit_code == 1
+
+
+def test_hsrp_command_with_vlan_writes_a_single_diagram(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["hsrp", "-i", str(HSRP_TOPOLOGY), "-o", str(output_dir), "--vlan", "10"])
+
+    assert exit_code == 0
+    assert {path.name for path in (output_dir / "hsrp").iterdir()} == {"hsrp_vlan10.drawio"}
+    # One link per member, from each gateway to the group's virtual IP.
+    assert _link_count(output_dir / "hsrp" / "hsrp_vlan10.drawio") == 2
+
+
+def test_hsrp_command_with_all_writes_one_diagram_per_vlan(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["hsrp", "-i", str(HSRP_TOPOLOGY), "-o", str(output_dir), "--all"])
+
+    assert exit_code == 0
+    assert {path.name for path in (output_dir / "hsrp").iterdir()} == {
+        "hsrp_vlan10.drawio",
+        "hsrp_vlan20.drawio",
+        "hsrp_vlan30.drawio",
+        "hsrp_vlan40.drawio",
+    }
+
+
+def test_hsrp_command_with_all_and_group_mode_topology_groups_matching_vlans(
+    tmp_path: Path,
+) -> None:
+    """VLANs 10 and 20 share active/standby roles and differ only in priority."""
+    output_dir = tmp_path / "output"
+    exit_code = main(
+        [
+            "hsrp",
+            "-i",
+            str(HSRP_TOPOLOGY),
+            "-o",
+            str(output_dir),
+            "--all",
+            "--group-mode",
+            "topology",
+        ]
+    )
+
+    assert exit_code == 0
+    assert {path.name for path in (output_dir / "hsrp").iterdir()} == {
+        "hsrp_vlans-10_20.drawio",
+        "hsrp_vlan30.drawio",
+        "hsrp_vlan40.drawio",
+    }
+
+
+def test_hsrp_command_draws_both_groups_of_a_load_shared_vlan(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["hsrp", "-i", str(HSRP_TOPOLOGY), "-o", str(output_dir), "--vlan", "40"])
+
+    assert exit_code == 0
+    # Two virtual gateways, two gateways, and a link from each router to each group.
+    assert _link_count(output_dir / "hsrp" / "hsrp_vlan40.drawio") == 4
+
+
+def test_hsrp_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
+    exit_code = main(["hsrp", "-i", str(tmp_path / "does-not-exist"), "--all"])
+    assert exit_code == 1

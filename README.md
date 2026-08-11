@@ -15,19 +15,21 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 4 — STP.** `nettopo stp -i <dir>` now renders real per-VLAN spanning-tree
-draw.io diagrams: the root bridge is highlighted, links are colored by forwarding vs
-blocking port state and labeled with role/state at each end, and `--vlan N` or
-`--group-mode per-vlan|strict|topology` (with `--all` to write every resulting diagram)
-select which VLANs are rendered. `stp.csv` now includes both base and effective bridge
-priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icons
-(`render/icons.py`) by inferred `DeviceRole`, with per-end interface labels,
-`--endpoints all|network-only` filtering and `--link-mode physical|port-channel`
-(MLAG links drawn once per bundle). Output is post-processed by `lucidify` by
-default (`--no-lucidify` to skip it), which keeps each end's label attached to its own
-end of the link rather than merging both into one, and normalizes the geometry flag N2G
-gets wrong so the labels survive a Lucidchart import.
-`hsrp`, `bgp`, and `all` still report "not implemented". Both working views are shown
+**Phase 5 — HSRP.** `nettopo hsrp -i <dir>` now renders real per-VLAN first-hop-redundancy
+draw.io diagrams: each HSRP group is drawn as a virtual gateway carrying its virtual IP,
+with a link to every router that offers it labeled with that router's SVI, role and
+priority — green for active, amber for standby — and the active router highlighted. It
+takes the same `--vlan N` / `--group-mode per-vlan|strict|topology` / `--all` options as
+`stp`, and `hsrp.csv` is now populated. `nettopo stp -i <dir>` (Phase 4) renders per-VLAN
+spanning-tree diagrams: the root bridge is highlighted, links are colored by forwarding vs
+blocking port state and labeled with role/state at each end. `nettopo l2 -i <dir>`
+(Phase 3) renders devices styled with Cisco icons (`render/icons.py`) by inferred
+`DeviceRole`, with per-end interface labels, `--endpoints all|network-only` filtering and
+`--link-mode physical|port-channel` (MLAG links drawn once per bundle). Output is
+post-processed by `lucidify` by default (`--no-lucidify` to skip it), which keeps each
+end's label attached to its own end of the link rather than merging both into one, and
+normalizes the geometry flag N2G gets wrong so the labels survive a Lucidchart import.
+`bgp` and `all` still report "not implemented". All three working views are shown
 end to end under [Example diagrams](#example-diagrams), generated from the capture set in
 [`examples/campus/`](examples/campus). See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
@@ -64,14 +66,17 @@ Requires Python 3.11+.
 [`examples/campus/`](examples/campus) is a complete, self-contained capture set for a
 six-switch campus: two core switches joined by a port-channel, two distribution
 switches, two access switches, plus an edge router, two ESXi hosts and a third access
-switch that no capture covers — ten devices in total. Every image below is nettopo's own
-output, and the `.drawio` files behind them are committed in
-[`examples/campus/diagrams/`](examples/campus/diagrams). Regenerate them with:
+switch that no capture covers — ten devices in total. It is the source of every diagram
+below except the last, which comes from the smaller
+[`examples/hsrp-quad/`](examples/hsrp-quad). Every image is nettopo's own output, and the
+`.drawio` files behind them are committed next to the captures. Regenerate them with:
 
 ```bash
-nettopo l2  -i examples/campus -o examples/campus/diagrams
-nettopo l2  -i examples/campus -o examples/campus/diagrams --endpoints network-only --link-mode port-channel
-nettopo stp -i examples/campus -o examples/campus/diagrams --all
+nettopo l2   -i examples/campus -o examples/campus/diagrams
+nettopo l2   -i examples/campus -o examples/campus/diagrams --endpoints network-only --link-mode port-channel
+nettopo stp  -i examples/campus -o examples/campus/diagrams --all
+nettopo hsrp -i examples/campus -o examples/campus/diagrams --all
+nettopo hsrp -i examples/hsrp-quad -o examples/hsrp-quad/diagrams --all
 ```
 
 The PNGs are exports of those same files, made with
@@ -161,6 +166,64 @@ differ. That is precisely the line between the two grouping modes:
 | `nettopo stp -i examples/campus --all --group-mode strict` | `stp_vlans-10_20`, `stp_vlan30`, `stp_vlan99` — 99 splits off on its priority |
 | `nettopo stp -i examples/campus --all --group-mode topology` | `stp_vlans-10_20_99`, `stp_vlan30` — two diagrams, one per distinct tree |
 
+### `nettopo hsrp --vlan 10` — who answers for the default gateway
+
+The core pair also runs HSRP on VLANs 10, 20 and 30, aligned with the spanning trees:
+`core-sw1` is active where it is root, `core-sw2` is active for VLAN 30. The rounded box
+is not a device — it is the virtual gateway `10.10.10.1`, the address the VLAN's hosts are
+configured with. Each router carries its own SVI address (`10.10.10.2`, `10.10.10.3`)
+under its name, so both halves of the first hop are on the page, and links to the gateway
+labeled with its SVI, HSRP role and priority: green for the router currently answering,
+amber for the one waiting to take over. The active router carries the same gold card the
+STP view gives a root bridge.
+
+![HSRP for VLAN 10: core-sw1 at 10.10.10.2 active with priority 150 on a green link to the
+virtual gateway 10.10.10.1, core-sw2 at 10.10.10.3 standby with priority 100 on an amber
+link](examples/campus/diagrams/hsrp/hsrp_vlan10.png)
+
+Source: [`hsrp/hsrp_vlan10.drawio`](examples/campus/diagrams/hsrp/hsrp_vlan10.drawio).
+
+`--group-mode` works the same way it does for `stp`, over the HSRP roles and priorities
+instead of the spanning tree. VLANs 10 and 20 have the same active/standby split but were
+configured with different priorities, so:
+
+| Command | Files written into `output/hsrp/` |
+|---|---|
+| `nettopo hsrp -i examples/campus --all` | `hsrp_vlan10`, `hsrp_vlan20`, `hsrp_vlan30` |
+| `nettopo hsrp -i examples/campus --all --group-mode strict` | unchanged — 10 and 20 differ on priority |
+| `nettopo hsrp -i examples/campus --all --group-mode topology` | `hsrp_vlans-10_20`, `hsrp_vlan30` — priorities ignored, so 10 and 20 collapse |
+
+### A group with four members — active, standby, and two listening
+
+A two-switch gateway pair is the common case, but an HSRP group can have any number of
+members and only ever two of them are named: one active, one standby. Everybody else sits
+in **Listen**, watching the hellos and waiting for an election.
+[`examples/hsrp-quad/`](examples/hsrp-quad) is a small capture set for exactly that — VLAN
+50 spans two buildings, each with a pair of layer-3 switches, and all four share one
+group:
+
+| Router | SVI address | Priority | State |
+|---|---|---|---|
+| `bldg-a-sw1` | `10.20.50.2` | 150 | Active — highlighted, green link |
+| `bldg-a-sw2` | `10.20.50.3` | 140 | Standby — amber link |
+| `bldg-b-sw1` | `10.20.50.4` | 110 | Listen — neutral link |
+| `bldg-b-sw2` | `10.20.50.5` | 100 | Listen — neutral link |
+
+![HSRP for VLAN 50 with four members: the virtual gateway 10.20.50.1 in the middle, the
+active bldg-a-sw1 on a green link, the standby bldg-a-sw2 on an amber link, and two
+listening switches on neutral gray links](examples/hsrp-quad/diagrams/hsrp/hsrp_vlan50.png)
+
+Source: [`hsrp/hsrp_vlan50.drawio`](examples/hsrp-quad/diagrams/hsrp/hsrp_vlan50.drawio).
+
+The two listeners are why every node carries its **own** address and not just the virtual
+one. `show standby brief` reports the active and standby routers by address — that is
+what its Active and Standby columns are — but it never names anyone else, so
+`10.20.50.4` and `10.20.50.5` appear nowhere in any of the four captures' HSRP output.
+They come from `show ip interface brief` instead, which is why that command is worth
+capturing even though the HSRP view needs no topology. The legend lists only the two
+colors this group uses; a neutral link means the router is in the group but neither
+answering for it nor next in line.
+
 ## Usage
 
 ```
@@ -169,7 +232,7 @@ nettopo [--version] [--log-level LEVEL] <command> [options]
 
 Every command reads a **directory** of saved capture files (see
 [Preparing captures](#preparing-captures) below) and writes into an output directory,
-creating it if needed. `parse`, `l2`, and `stp` are implemented; `hsrp`, `bgp`, and `all`
+creating it if needed. `parse`, `l2`, `stp`, and `hsrp` are implemented; `bgp` and `all`
 are scaffolded but not yet implemented (running them prints `'<command>' is not
 implemented yet.` and exits with status 1 — see [Status](#status)).
 
@@ -187,7 +250,7 @@ implemented yet.` and exits with status 1 — see [Status](#status)).
 | `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
 | `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
 | `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
-| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`; later `hsrp`, `bgp`, `all`) — `parse` ignores it. |
+| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`, `hsrp`; later `bgp`, `all`) — `parse` ignores it. |
 
 ### `nettopo parse`
 
@@ -204,8 +267,9 @@ Writes `output/csv/devices.csv` (including each device's serial, from its own
 `show version` or from the CDP/LLDP report of a neighbor; and its management IP, from
 CDP's `Management address(es)` block or LLDP's management TLV), `interfaces.csv`,
 `neighbors.csv`, `vlans.csv`, `stp.csv` (base *and* effective bridge priority — see
-[PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), and header-only `hsrp.csv`/`bgp.csv`
-until Phases 5–6 add those parsers.
+[PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), `hsrp.csv` (one row per group member,
+with the group's virtual IP beside that member's SVI, priority, role and preempt flag),
+and header-only `bgp.csv` until Phase 6 adds that parser.
 
 One row per device and per adjacency, regardless of how many names its neighbors use for
 it: CDP and LLDP disagree constantly (`nxos-core1` vs `nxos-core1(FDO21120U5D)` vs
@@ -302,11 +366,63 @@ Filenames: `output/stp/stp_vlan10.drawio` for a single VLAN; for a group, a sort
 filesystem-safe name listing every VLAN it covers, e.g.
 `output/stp/stp_vlans-10_20_30.drawio`.
 
-### `nettopo hsrp`, `nettopo bgp`, `nettopo all` — not yet implemented
+### `nettopo hsrp`
 
-These subcommands parse their arguments (`hsrp` already accepts the same
-`--vlan`/`--group-mode`/`--all` options as `stp`) but every run currently exits with
-status 1 and logs `'<command>' is not implemented yet.`. They land in Phases 5–7 — see
+Renders per-VLAN HSRP diagrams: which routers offer the VLAN's default gateway, which one
+currently answers for it, at what priority, and on which address. Needs only `show standby
+brief` in the captures — unlike `stp`, this view draws no physical links, so no
+neighbor-discovery command is required (`show version` still helps, by naming each device
+from its own capture rather than from its filename).
+
+Each HSRP group is drawn as a **virtual gateway**: a plain rounded box labeled with the
+VLAN, the group number and the virtual IP. It is deliberately not given a Cisco icon,
+because it is an address rather than a device. Every router running that group links to
+it, labeled `Vl10 active/150` — its SVI, HSRP role and priority — with the link colored
+green when that router is active for the group and amber when it is the standby. The
+active router itself is highlighted with a gold card.
+
+Each router is also labeled with **its own SVI address** in that VLAN, beside the virtual
+one, which is what tells you which box a given traceroute hop or ping reply actually is.
+That address comes from `show ip interface brief` (or `show interfaces`), not from `show
+standby brief` — the brief output names only the active and standby routers, and only by
+address, so a member that is merely listening cannot be placed from it at all. Add one of
+those two commands to the captures and every member gets its address; without them the
+nodes are labeled with their names alone rather than a guess.
+
+One VLAN is one diagram, including when its SVI carries **several groups**: two gateways
+load-sharing a VLAN (each active for one group, standby for the other) is one picture with
+two virtual gateways in it, not two pictures.
+
+HSRP running on a routed port or a subinterface rather than an SVI is skipped with a
+warning naming the interface: diagrams and CSV rows alike are keyed by VLAN, and such a
+group has no VLAN to be keyed by.
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `--vlan` | VLAN id, e.g. `10` | *(none)* | Restrict to a single VLAN's diagram. Mutually exclusive with `--group-mode`. |
+| `--group-mode` | `per-vlan`, `strict`, `topology` | `per-vlan` | How to group VLANs that would render identically. `per-vlan`: one diagram per VLAN, no grouping. `strict`: group VLANs whose members, roles *and* priorities all match. `topology`: group VLANs whose members and roles match, ignoring configured priorities. Mutually exclusive with `--vlan`. |
+| `--all` | flag | off | Write every resulting diagram (one per VLAN, or one per group under `--group-mode`) into `output/hsrp/`. |
+
+As with `stp`, either `--vlan` or `--all` is required.
+
+```bash
+nettopo hsrp -i ./captures --vlan 10                        # one diagram, VLAN 10 only
+nettopo hsrp -i ./captures --all                            # one diagram per VLAN
+nettopo hsrp -i ./captures --all --group-mode topology      # grouped, priorities ignored
+```
+
+Filenames follow the same rule as `stp`: `output/hsrp/hsrp_vlan10.drawio` for a single
+VLAN, `output/hsrp/hsrp_vlans-10_20_30.drawio` for a group.
+
+A grouped diagram is rendered from the lowest VLAN in its group, and the virtual IP is
+exactly what differs between the VLANs it covers — so the gateway node names the VLAN its
+address belongs to (`VLAN 10 group 10`) rather than leaving the reader to assume the
+address applies to all of them. `hsrp.csv` has the per-VLAN detail.
+
+### `nettopo bgp`, `nettopo all` — not yet implemented
+
+These subcommands parse their arguments but every run currently exits with status 1 and
+logs `'<command>' is not implemented yet.`. They land in Phases 6–7 — see
 [`PROJECT_SPEC.md` §14](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues).
 
 ### Preparing captures
@@ -329,7 +445,7 @@ is what each subcommand needs to produce a *complete* result.
 | `parse` | — | every command in the next table; each fills its own CSV table or columns |
 | `l2` | `show cdp neighbors detail` and/or `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (only for `--link-mode port-channel`) |
 | `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (**required** when links are bundled) · `show lldp neighbors detail` (to identify a root bridge outside the captures) |
-| `hsrp` | `show standby brief` — *not yet implemented (Phase 5)* | |
+| `hsrp` | `show standby brief` | `show ip interface brief` / `show interfaces` (each member's own SVI address on its node) · `show version` (device naming) |
 | `bgp` | `show ip bgp summary` — *not yet implemented (Phase 6)* | |
 
 > **`stp` needs CDP/LLDP too.** `show spanning-tree` reports a device's *own* bridge and
@@ -352,10 +468,11 @@ What each command contributes, whichever subcommand you run:
 | `show version` | `platform`, `model`, `os` and `serial` in `devices.csv`, and the canonical hostname every neighbor's spelling is correlated onto — without it that name falls back to the prompt line, which is usually the same |
 | `show cdp neighbors detail` | Links between devices (`neighbors.csv`, and the links in both the L2 and STP diagrams), plus each neighbor's role/icon, platform and management IP |
 | `show lldp neighbors detail` | The same, for neighbors that don't speak CDP. Where both describe one adjacency, CDP wins |
-| `show ip interface brief` | `interfaces.csv`: admin/operational state and IP per interface |
+| `show ip interface brief` | `interfaces.csv`: admin/operational state and IP per interface — including the SVI addresses the HSRP diagrams label their routers with |
 | `show interfaces` | `interfaces.csv`: descriptions, precise IP/prefix, link state. Richer than `show ip interface brief` and wins where the two overlap |
 | `show vlan brief` | `vlans.csv` |
 | `show spanning-tree` | `stp.csv` and the STP diagrams: bridge IDs, base and effective priority, per-port role/state |
+| `show standby brief` | `hsrp.csv` and the HSRP diagrams: each group's virtual IP, and each member's SVI, priority, role and preempt flag |
 | `show etherchannel summary` (IOS/IOS-XE) · `show port-channel summary` (NX-OS) | `po_id`/`po_members` in `interfaces.csv`, and the bundles `l2 --link-mode port-channel` collapses links onto |
 
 A capture covering everything implemented today:
@@ -374,6 +491,8 @@ sw1-access#show interfaces
 sw1-access#show vlan brief
 ...
 sw1-access#show spanning-tree
+...
+sw1-access#show standby brief
 ...
 sw1-access#show etherchannel summary
 ...

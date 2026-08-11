@@ -29,6 +29,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "captures"
 NXOS_FIXTURES = Path(__file__).parent / "fixtures" / "captures_nxos"
 PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "captures_portchannel"
 STP_PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "stp_portchannel"
+HSRP_FIXTURES = Path(__file__).parent / "fixtures" / "hsrp_topology"
 
 
 def _build_model() -> NetworkModel:
@@ -268,3 +269,19 @@ def test_the_root_address_is_recorded_even_when_no_captured_bridge_is_the_root()
     stp_vlan = build_network_model(FileDataSource(STP_PORT_CHANNEL_FIXTURES)).stp[10]
     assert stp_vlan.root_device is None
     assert stp_vlan.root_mac == "aaaa.bbbb.9999"
+
+
+def test_hsrp_groups_are_keyed_by_vlan_and_group_and_merge_both_devices() -> None:
+    model = build_network_model(FileDataSource(HSRP_FIXTURES))
+    vlan10 = model.hsrp[(10, 10)]
+
+    assert vlan10.virtual_ip == "10.0.10.1"
+    assert set(vlan10.members) == {"gw-a", "gw-b"}
+    assert vlan10.members["gw-a"].role.value == "active"
+    assert vlan10.members["gw-b"].priority == 100
+
+
+def test_several_hsrp_groups_on_one_svi_stay_separate() -> None:
+    model = build_network_model(FileDataSource(HSRP_FIXTURES))
+    assert [key for key in sorted(model.hsrp) if key[0] == 40] == [(40, 40), (40, 41)]
+    assert model.hsrp[(40, 41)].virtual_ip == "10.0.40.254"

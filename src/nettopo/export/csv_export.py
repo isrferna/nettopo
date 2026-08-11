@@ -1,8 +1,8 @@
 """CSV export of every intermediate table (PROJECT_SPEC.md section 8).
 
 CSV is a first-class output, not an afterthought: it is both a deliverable and the
-primary debugging aid for a wrong diagram. One table per model entity. `stp.csv`,
-`hsrp.csv`, and `bgp.csv` are header-only until their parsers land in Phases 4-6.
+primary debugging aid for a wrong diagram. One table per model entity. `bgp.csv` is
+header-only until its parser lands in Phase 6.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def write_csv_tables(model: NetworkModel, output_root: Path) -> Path:
     _write_neighbors(csv_dir / "neighbors.csv", model)
     _write_vlans(csv_dir / "vlans.csv", model)
     _write_stp(csv_dir / "stp.csv", model)
-    _write_table(csv_dir / "hsrp.csv", _HSRP_HEADER, [])
+    _write_hsrp(csv_dir / "hsrp.csv", model)
     _write_table(csv_dir / "bgp.csv", _BGP_HEADER, [])
 
     return csv_dir
@@ -193,6 +193,26 @@ def _write_stp(path: Path, model: NetworkModel) -> None:
                     )
                 )
     _write_table(path, _STP_HEADER, rows)
+
+
+def _write_hsrp(path: Path, model: NetworkModel) -> None:
+    rows: list[tuple[object, ...]] = []
+    for key in sorted(model.hsrp):
+        hsrp_group = model.hsrp[key]
+        for device, member in sorted(hsrp_group.members.items()):
+            rows.append(
+                (
+                    hsrp_group.vlan,
+                    hsrp_group.group,
+                    hsrp_group.virtual_ip,
+                    device,
+                    member.interface,
+                    member.priority,
+                    member.role.value,
+                    member.preempt,
+                )
+            )
+    _write_table(path, _HSRP_HEADER, rows)
 
 
 def _write_table(path: Path, header: tuple[str, ...], rows: Sequence[tuple[object, ...]]) -> None:

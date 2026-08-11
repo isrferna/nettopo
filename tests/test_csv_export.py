@@ -8,6 +8,9 @@ from pathlib import Path
 from nettopo.export.csv_export import write_csv_tables
 from nettopo.model.entities import (
     Device,
+    HsrpGroup,
+    HsrpMember,
+    HsrpRole,
     Interface,
     Link,
     NetworkModel,
@@ -154,6 +157,67 @@ def test_stp_csv_has_one_row_per_port_with_base_and_effective_priority(tmp_path:
     assert sw2_row["interface"] == "Gi1/0/2"
     assert sw2_row["role"] == "root"
     assert sw2_row["state"] == "forwarding"
+
+
+def test_hsrp_csv_has_one_row_per_member_sorted_by_vlan_and_group(tmp_path: Path) -> None:
+    model = _sample_model()
+    model.hsrp[(10, 11)] = HsrpGroup(
+        vlan=10,
+        group=11,
+        virtual_ip="10.0.10.254",
+        members={
+            "sw1": HsrpMember(
+                device="sw1",
+                interface="Vl10",
+                group=11,
+                priority=90,
+                role=HsrpRole.STANDBY,
+                preempt=False,
+            )
+        },
+    )
+    model.hsrp[(10, 10)] = HsrpGroup(
+        vlan=10,
+        group=10,
+        virtual_ip="10.0.10.1",
+        members={
+            "sw2": HsrpMember(
+                device="sw2",
+                interface="Vl10",
+                group=10,
+                priority=100,
+                role=HsrpRole.STANDBY,
+                preempt=True,
+            ),
+            "sw1": HsrpMember(
+                device="sw1",
+                interface="Vl10",
+                group=10,
+                priority=150,
+                role=HsrpRole.ACTIVE,
+                preempt=True,
+            ),
+        },
+    )
+    csv_dir = write_csv_tables(model, tmp_path)
+    rows = _read_rows(csv_dir / "hsrp.csv")
+
+    assert [(row["vlan"], row["group"], row["device"]) for row in rows] == [
+        ("10", "10", "sw1"),
+        ("10", "10", "sw2"),
+        ("10", "11", "sw1"),
+    ]
+    assert rows[0] == {
+        "vlan": "10",
+        "group": "10",
+        "virtual_ip": "10.0.10.1",
+        "device": "sw1",
+        "interface": "Vl10",
+        "priority": "150",
+        "role": "active",
+        "preempt": "True",
+    }
+    assert rows[2]["preempt"] == "False"
 
 
 def test_stp_csv_carries_the_root_address_and_port_type(tmp_path: Path) -> None:
