@@ -1,12 +1,16 @@
 """Tests for the N2G draw.io wrapper (PROJECT_SPEC.md section 8).
 
 Per PROJECT_SPEC.md section 12: assert the draw.io XML is well-formed and that expected
-nodes/links exist; pixel positions (layout output) are not asserted.
+nodes/links exist; pixel positions (layout output) are not asserted. The node-spacing
+tests below stay on the right side of that line -- they assert how far apart the closest
+two nodes end up, never where any node is.
 """
 
 from __future__ import annotations
 
+import math
 import xml.etree.ElementTree as ET
+from itertools import combinations
 from pathlib import Path
 
 from nettopo.model.entities import DeviceRole
@@ -175,3 +179,69 @@ def test_a_link_without_a_tooltip_gets_no_tooltip_attribute(tmp_path: Path) -> N
 
     root = ET.fromstring(output_path.read_text(encoding="utf-8"))
     assert all(obj.get("tooltip") is None for obj in root.findall(".//object"))
+
+
+def _ring_diagram(end_label: str) -> Diagram:
+    """Five switches in a ring, every link end carrying `end_label`.
+
+    A ring gives the layout no natural place to put a node far from the others, which is
+    what makes the closest pair worth measuring.
+    """
+    names = [f"sw{index}" for index in range(5)]
+    return Diagram(
+        nodes=[DiagramNode(id=name, label=name, role=DeviceRole.SWITCH) for name in names],
+        links=[
+            DiagramLink(
+                source=name,
+                target=names[(index + 1) % len(names)],
+                src_label=end_label,
+                trgt_label=end_label,
+            )
+            for index, name in enumerate(names)
+        ],
+    )
+
+
+def _closest_node_pair_distance(output_path: Path) -> float:
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    positions = []
+    for node_object in root.findall(".//object"):
+        cell = node_object.find("./mxCell")
+        if cell is None or cell.get("edge") == "1":
+            continue
+        geometry = cell.find("./mxGeometry")
+        if geometry is not None and geometry.get("x") is not None:
+            positions.append((float(geometry.get("x", 0)), float(geometry.get("y", 0))))
+    return min(math.dist(one, other) for one, other in combinations(positions, 2))
+
+
+def test_the_closest_two_nodes_leave_room_for_the_labels_between_them(tmp_path: Path) -> None:
+    # The regression: N2G fits its layout into one fixed-size canvas, which left the STP
+    # view's closest nodes ~157px apart -- less than the width of a single
+    # "Gi1/0/3 designated/forwarding" label, so icons and labels piled up unreadably.
+    # That label renders about 174px wide, and the gap has to hold two of them: the facing
+    # halves of both nodes' own labels, plus the link end label pinned between them.
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_ring_diagram("Gi1/0/3 designated/forwarding"), output_path)
+
+    assert _closest_node_pair_distance(output_path) > 2 * 174
+
+
+def test_long_labels_push_the_nodes_further_apart_than_short_ones(tmp_path: Path) -> None:
+    """Spacing follows the labels a view actually writes, so the L2 view stays compact."""
+    long_labels = tmp_path / "stp.drawio"
+    short_labels = tmp_path / "l2.drawio"
+    render_diagram(_ring_diagram("Gi1/0/3 designated/forwarding"), long_labels)
+    render_diagram(_ring_diagram("Gi1/0/3"), short_labels)
+
+    assert _closest_node_pair_distance(long_labels) > _closest_node_pair_distance(short_labels)
+
+
+def test_a_single_node_diagram_needs_no_spacing_and_still_renders(tmp_path: Path) -> None:
+    """There is no pair to measure, so the spacing pass has to leave the node alone."""
+    output_path = tmp_path / "stp.drawio"
+    diagram = Diagram(nodes=[DiagramNode(id="sw1", label="sw1", role=DeviceRole.SWITCH)])
+    render_diagram(diagram, output_path)
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    assert root.find(".//object[@id='sw1']") is not None

@@ -6,35 +6,35 @@
           <mxCell id="1" parent="0" />
         <object id="acc-sw1" label="acc-sw1">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="291" y="618" width="120" height="60" as="geometry" />
+          <mxGeometry x="352" y="748" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="acc-sw2" label="acc-sw2">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="508" y="835" width="120" height="60" as="geometry" />
+          <mxGeometry x="615" y="1011" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="acc-sw3" label="acc-sw3">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="739" y="707" width="120" height="60" as="geometry" />
+          <mxGeometry x="894" y="856" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="core-sw1" label="core-sw1">
       <mxCell style="shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="944" y="383" width="120" height="60" as="geometry" />
+          <mxGeometry x="1142" y="464" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="core-sw2" label="core-sw2">
       <mxCell style="shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="470" y="289" width="120" height="60" as="geometry" />
+          <mxGeometry x="569" y="350" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="dist-sw1" label="dist-sw1">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="543" y="16" width="120" height="60" as="geometry" />
+          <mxGeometry x="657" y="19" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="dist-sw2" label="dist-sw2">
       <mxCell style="shape=mxgraph.cisco.switches.workgroup_switch;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="1039" y="676" width="120" height="60" as="geometry" />
+          <mxGeometry x="1257" y="818" width="120" height="60" as="geometry" />
       </mxCell>
     </object><object id="edge-rtr" label="edge-rtr">
       <mxCell style="shape=mxgraph.cisco.routers.router;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#036897;strokeColor=#ffffff;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="623" y="153" width="120" height="60" as="geometry" />
+          <mxGeometry x="754" y="185" width="120" height="60" as="geometry" />
       </mxCell>
     </object><mxCell id="2b88ea1c318d66953c0348eac72076ed-src" value="Gi1/0/23" style="labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="2b88ea1c318d66953c0348eac72076ed">
       <mxGeometry x="-0.5" relative="1" as="geometry">

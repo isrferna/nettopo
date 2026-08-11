@@ -30,6 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capture or changing a view's output would leave the documented diagrams silently
   wrong.
 
+### Fixed
+
+- Rendered diagrams no longer draw nodes on top of each other. N2G fits its igraph
+  layout into one fixed-size canvas, so the spacing between nodes was the same however
+  long their labels were — which the STP view's per-end labels
+  (`Gi1/0/3 designated/forwarding`) overflowed badly: in the campus example `core-sw2`
+  and `dist-sw2` landed ~157px apart and their icons, node labels and link end labels
+  merged into an unreadable pile. `render/drawio.py` now scales the finished layout up
+  until the closest two nodes have room for the labels the diagram actually carries, so
+  the STP view spreads out while the short-labeled L2 view stays compact. Kamada-Kawai
+  (`kk`) is kept as the layout algorithm — of N2G's alternatives, `fr` packs the closest
+  pair tighter, `drl` collapses a graph this size almost to a point, and `rt` flattens
+  it into rows of touching nodes. The committed example diagrams are regenerated.
+
 ## [0.3.0] - 2026-08-11
 
 Neighbor identity resolution, port-channel awareness, and the STP view working against
