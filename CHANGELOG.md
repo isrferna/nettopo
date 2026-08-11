@@ -70,6 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **STP diagrams drew arrowheads on their links.** Spanning-tree links are not directed,
+  and the arrow pointed nowhere meaningful: the STP view orders an edge's ends by device
+  name, so it ran from the alphabetically-earlier device to the later one. N2G substitutes
+  its default link style for whatever style it is handed rather than merging the two, so
+  the color the STP view sets for port state was displacing the default's `endArrow=none`.
+  Only STP was affected, since it is the only view that colors links — and only its colored
+  links, leaving transitioning (listening/learning) links arrowless while their neighbors
+  had arrows. Links now spell out `endArrow=none` everywhere. Colors, stroke width, per-end
+  labels, root highlighting and L2 output are all unchanged.
 - **Link labels came loose from their links in `0.3.0rc4`.** That release placed each end
   label as a free-standing text cell on the canvas, which draw.io reads as a *node*: any
   Arrange layout (Circle, Tree, Organic) laid the labels out along with the devices,

@@ -479,6 +479,15 @@ neither N2G nor draw.io concepts. `render/icons.py` maps `DeviceRole` (and, sinc
 igraph-backed `kk` layout, then hands the dumped XML to `lucidify.py` unless
 `--no-lucidify` was passed.
 
+Links are undirected in every view, and `_link_style()` spells `endArrow=none` out on every
+one of them rather than leaning on N2G's default. N2G *substitutes* its
+`default_link_style` for whatever style it is handed instead of merging the two, so a link
+that carries a color — which only the STP view sets, for port state — would silently lose
+the default and render with draw.io's arrowhead. That arrow would also be a lie: the STP
+view orders an edge's ends by device name (`views/stp.py`, `_build_edges`), so it would
+point from the alphabetically-earlier device to the later one, which says nothing about
+root ports or designated ports.
+
 ### The lucidify post-process
 
 N2G emits each link's per-end interface label (`src_label`/`trgt_label`) as a child

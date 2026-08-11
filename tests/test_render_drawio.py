@@ -112,19 +112,48 @@ def test_highlighted_node_style_carries_the_highlight_color(tmp_path: Path) -> N
     assert "#FFD700" in node_cell.get("style", "")
 
 
-def test_link_color_is_applied_to_the_edge_style(tmp_path: Path) -> None:
-    output_path = tmp_path / "stp.drawio"
-    diagram = Diagram(
+def _colored_link_diagram() -> Diagram:
+    return Diagram(
         nodes=[
             DiagramNode(id="sw1", label="sw1", role=DeviceRole.SWITCH),
             DiagramNode(id="sw2", label="sw2", role=DeviceRole.SWITCH),
         ],
         links=[DiagramLink(source="sw1", target="sw2", color="#C62828")],
     )
-    render_diagram(diagram, output_path, apply_lucidify=False)
 
-    xml_text = output_path.read_text(encoding="utf-8")
-    assert "#C62828" in xml_text
+
+def _edge_style(output_path: Path) -> str:
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    edge_cell = root.find(".//mxCell[@edge='1']")
+    assert edge_cell is not None
+    return edge_cell.get("style", "")
+
+
+def test_link_color_is_applied_to_the_edge_style(tmp_path: Path) -> None:
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_colored_link_diagram(), output_path, apply_lucidify=False)
+
+    assert "strokeColor=#C62828;" in _edge_style(output_path)
+
+
+def test_a_colored_link_is_still_drawn_without_an_arrowhead(tmp_path: Path) -> None:
+    # N2G substitutes its default style for whatever it is given instead of merging them,
+    # so a link that carries a color used to lose the default's `endArrow=none` and come
+    # out with draw.io's arrowhead -- pointing whichever way the view happened to order the
+    # edge's ends, which in the STP view is alphabetical and therefore meaningless.
+    output_path = tmp_path / "stp.drawio"
+    render_diagram(_colored_link_diagram(), output_path, apply_lucidify=False)
+
+    style = _edge_style(output_path)
+    assert "endArrow=none;" in style
+    assert "strokeColor=#C62828;" in style
+
+
+def test_an_uncolored_link_is_drawn_without_an_arrowhead(tmp_path: Path) -> None:
+    output_path = tmp_path / "l2.drawio"
+    render_diagram(_diagram(), output_path, apply_lucidify=False)
+
+    assert "endArrow=none;" in _edge_style(output_path)
 
 
 def test_a_link_tooltip_is_rendered_as_a_drawio_tooltip_attribute(tmp_path: Path) -> None:
