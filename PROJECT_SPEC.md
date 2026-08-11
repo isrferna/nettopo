@@ -81,6 +81,9 @@ nettopo/
 ├── PROJECT_SPEC.md            # this file
 ├── docs/
 │   └── architecture.md        # components, call flows, design decisions
+├── examples/
+│   └── campus/                # runnable six-switch capture set behind the README diagrams
+│       └── diagrams/          # its generated .drawio files and the PNGs the README embeds
 ├── src/
 │   └── nettopo/
 │       ├── __init__.py
@@ -127,6 +130,7 @@ nettopo/
 │           └── paths.py       # output-path resolution and filename sanitization
 └── tests/
     ├── fixtures/              # anonymized real captures used as parser inputs
+    ├── test_examples_campus.py  # keeps examples/campus/ matching what the README shows
     ├── test_interfaces.py
     ├── test_parsing_*.py
     ├── test_grouping.py

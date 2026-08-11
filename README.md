@@ -27,7 +27,9 @@ priority. `nettopo l2 -i <dir>` (Phase 3) renders devices styled with Cisco icon
 default (`--no-lucidify` to skip it), which keeps each end's label attached to its own
 end of the link rather than merging both into one, and normalizes the geometry flag N2G
 gets wrong so the labels survive a Lucidchart import.
-`hsrp`, `bgp`, and `all` still report "not implemented". See the delivery plan in
+`hsrp`, `bgp`, and `all` still report "not implemented". Both working views are shown
+end to end under [Example diagrams](#example-diagrams), generated from the capture set in
+[`examples/campus/`](examples/campus). See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
@@ -56,6 +58,106 @@ pip install -e ".[dev]"
 ```
 
 Requires Python 3.11+.
+
+## Example diagrams
+
+[`examples/campus/`](examples/campus) is a complete, self-contained capture set for a
+six-switch campus: two core switches joined by a port-channel, two distribution
+switches, two access switches, plus an edge router, two ESXi hosts and a third access
+switch that no capture covers — ten devices in total. Every image below is nettopo's own
+output, and the `.drawio` files behind them are committed in
+[`examples/campus/diagrams/`](examples/campus/diagrams). Regenerate them with:
+
+```bash
+nettopo l2  -i examples/campus -o examples/campus/diagrams
+nettopo l2  -i examples/campus -o examples/campus/diagrams --endpoints network-only --link-mode port-channel
+nettopo stp -i examples/campus -o examples/campus/diagrams --all
+```
+
+The PNGs are exports of those same files, made with
+[draw.io Desktop](https://www.drawio.com/)'s CLI — leaving out `-t/--transparent` is what
+gives them a white background:
+
+```bash
+drawio -x -f png -s 2 -b 20 -o examples/campus/diagrams/l2/l2_full.png examples/campus/diagrams/l2/l2_full.drawio
+```
+
+> A PNG is a snapshot. Open the `.drawio` in [draw.io](https://app.diagrams.net) for the
+> editable diagram — draggable nodes, and the hover tooltips that carry a port-channel's
+> member interfaces.
+
+### `nettopo l2` — physical topology
+
+Ten nodes, thirteen links; each link is labeled with the physical interface at each end,
+and each node is styled by the role its neighbors reported over CDP/LLDP (the two core
+switches advertise `Router Switch`, so they get the router icon; `esxi-host01/02`
+advertise `Host`).
+
+![L2 topology of the campus example: ten devices, thirteen links, each end labeled with
+its physical interface](examples/campus/diagrams/l2/l2_full.png)
+
+Source: [`l2/l2_full.drawio`](examples/campus/diagrams/l2/l2_full.drawio).
+
+### `nettopo l2 --endpoints network-only --link-mode port-channel`
+
+The same topology with the two flags applied: the ESXi hosts are gone (they advertise
+neither `Router` nor `Switch`), and the two physical core links have collapsed into the
+single bundle both switches call `Po1`. Its member interfaces move into the link's
+draw.io hover tooltip (`Gi1/0/1 — Gi1/0/1`, `Gi1/0/2 — Gi1/0/2`), which the PNG below
+cannot show but the `.drawio` does. Eight nodes, ten links.
+
+![The same topology without the ESXi hosts, with the two core links collapsed into a
+single link labeled Po1 at both ends](examples/campus/diagrams/l2/l2_network-only_port-channels.png)
+
+Source:
+[`l2/l2_network-only_port-channels.drawio`](examples/campus/diagrams/l2/l2_network-only_port-channels.drawio).
+
+### `nettopo stp --vlan 10` — spanning tree for the user VLAN
+
+Switches only: `edge-rtr` and the two ESXi hosts are gone. `core-sw1` is the root bridge
+(gold border); every other node carries its bridge MAC and effective priority.
+`acc-sw3` has no capture of its own, so it is drawn dashed and labeled with its name
+alone — it is included because the port facing it (`dist-sw2 Gi1/0/22`) is not an Edge
+port, the same filter that keeps the ESXi hosts out. Green links forward at both ends;
+red links have a blocked end. The three blocked ports are what breaks the two loops in
+the topology.
+
+![Spanning tree for VLAN 10: core-sw1 gold-bordered as root bridge, green forwarding
+links, three red links with a blocked end, acc-sw3 drawn
+dashed](examples/campus/diagrams/stp/stp_vlan10.png)
+
+Source: [`stp/stp_vlan10.drawio`](examples/campus/diagrams/stp/stp_vlan10.drawio).
+
+Note that the core-to-core link is drawn **once**, labeled `Po1`: spanning tree treats a
+bundle as one logical port, and `show spanning-tree` only ever names `Po1` while
+CDP/LLDP only ever name `Gi1/0/1`/`Gi1/0/2`. `show etherchannel summary` is what joins
+the two — drop it from `core-sw1.txt`/`core-sw2.txt` and this link disappears.
+
+### `nettopo stp --vlan 30` — the same network, a different tree
+
+VLAN 30 is rooted on `core-sw2` (`spanning-tree vlan 30 root primary`, with `core-sw1`
+as secondary). Same devices, same cabling, different tree: the blocked ports move from
+`Gi1/0/2` to `Gi1/0/1` on both distribution switches, and the core port-channel reverses
+role. This is why the view renders one diagram per VLAN rather than a single "STP
+diagram".
+
+![Spanning tree for VLAN 30: the same devices with core-sw2 as root bridge and the
+blocked ports moved to the other core switch](examples/campus/diagrams/stp/stp_vlan30.png)
+
+Source: [`stp/stp_vlan30.drawio`](examples/campus/diagrams/stp/stp_vlan30.drawio).
+
+### What `--group-mode` does to this capture set
+
+The example has four VLANs, and VLANs 10, 20 and 99 produce the identical picture above
+— only VLAN 30 differs. VLAN 99 is the interesting case: its tree matches 10 and 20
+exactly, but nobody configured `core-sw2` as its secondary root, so its *priorities*
+differ. That is precisely the line between the two grouping modes:
+
+| Command | Files written into `output/stp/` |
+|---|---|
+| `nettopo stp -i examples/campus --all` | `stp_vlan10`, `stp_vlan20`, `stp_vlan30`, `stp_vlan99` — four identical-looking diagrams for three identical trees |
+| `nettopo stp -i examples/campus --all --group-mode strict` | `stp_vlans-10_20`, `stp_vlan30`, `stp_vlan99` — 99 splits off on its priority |
+| `nettopo stp -i examples/campus --all --group-mode topology` | `stp_vlans-10_20_99`, `stp_vlan30` — two diagrams, one per distinct tree |
 
 ## Usage
 
@@ -294,6 +396,7 @@ See [`PROJECT_SPEC.md` §9](PROJECT_SPEC.md#9-cli-design) for the CLI design rat
 
 ## Documentation
 
+- [`examples/`](examples) — runnable capture sets, including the one behind the diagrams above.
 - [`PROJECT_SPEC.md`](PROJECT_SPEC.md) — scope, architecture, data model, CLI, delivery plan.
 - [`docs/architecture.md`](docs/architecture.md) — components, call flow, design decisions.
 - [`CLAUDE.md`](CLAUDE.md) — engineering conventions (workflow, coding principles, security review).
