@@ -1,0 +1,225 @@
+core-sw2#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+Compiled Tue 11-Jul-23 05:00 by mcpre
+
+ROM: IOS-XE ROMMON
+
+core-sw2 uptime is 12 weeks, 3 days, 6 hours, 39 minutes
+Uptime for this control processor is 12 weeks, 3 days, 6 hours, 41 minutes
+System returned to ROM by Reload Command
+System restarted at 07:17:44 UTC Mon May 12 2025
+System image file is "flash:packages.conf"
+
+
+cisco C9500-16X (X86) processor with 1867264K/6147K bytes of memory.
+Processor board ID FCW2445L0BB
+16 Ten Gigabit Ethernet interfaces
+2147483647K bytes of physical memory.
+Configuration register is 0x102
+
+core-sw2#show cdp neighbors detail
+-------------------------
+Device ID: core-sw1.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: cisco C9500-16X,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 147 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.1
+
+-------------------------
+Device ID: core-sw1.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: cisco C9500-16X,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 147 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.1
+
+-------------------------
+Device ID: dist-sw1.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.11
+Platform: cisco C9300-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/3,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 158 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.11
+
+-------------------------
+Device ID: dist-sw2.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.12
+Platform: cisco C9300-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/4,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 136 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.12
+
+Total cdp entries displayed : 4
+
+core-sw2#show lldp neighbors detail
+Local Intf: Gi1/0/1
+Chassis id: 00a1.b2c3.d001
+Port id: Gi1/0/1
+Port Description: GigabitEthernet1/0/1
+System Name: core-sw1.campus.example.com
+
+System Description:
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+Time remaining: 91 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Addresses:
+    IP: 10.0.0.1
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 1
+
+core-sw2#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+Vlan10                 10.10.10.3      YES manual up                    up
+Vlan20                 10.10.20.3      YES manual up                    up
+Vlan30                 10.10.30.3      YES manual up                    up
+Vlan99                 10.0.0.2        YES manual up                    up
+Port-channel1          unassigned      YES unset  up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+GigabitEthernet1/0/2   unassigned      YES unset  up                    up
+GigabitEthernet1/0/3   unassigned      YES unset  up                    up
+GigabitEthernet1/0/4   unassigned      YES unset  up                    up
+
+core-sw2#show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active
+10   users                            active    Gi1/0/3, Gi1/0/4
+20   voice                            active    Gi1/0/3, Gi1/0/4
+30   servers                          active    Gi1/0/3, Gi1/0/4
+99   mgmt                             active    Gi1/0/3, Gi1/0/4
+
+core-sw2#show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      N - not in use, no aggregation
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP      Gi1/0/1(P)  Gi1/0/2(P)
+
+core-sw2#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     00a1.b2c3.d001
+             Cost        3
+             Port        664 (Port-channel1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    28682  (priority 28672 sys-id-ext 10)
+             Address     00a1.b2c3.d002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/3              Desg FWD 4         128.3    P2p
+Gi1/0/4              Desg FWD 4         128.4    P2p
+Po1                  Root FWD 3         128.664  P2p
+
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24596
+             Address     00a1.b2c3.d001
+             Cost        3
+             Port        664 (Port-channel1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    28692  (priority 28672 sys-id-ext 20)
+             Address     00a1.b2c3.d002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/3              Desg FWD 4         128.3    P2p
+Gi1/0/4              Desg FWD 4         128.4    P2p
+Po1                  Root FWD 3         128.664  P2p
+
+VLAN0030
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24606
+             Address     00a1.b2c3.d002
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    24606  (priority 24576 sys-id-ext 30)
+             Address     00a1.b2c3.d002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/3              Desg FWD 4         128.3    P2p
+Gi1/0/4              Desg FWD 4         128.4    P2p
+Po1                  Desg FWD 3         128.664  P2p
+
+VLAN0099
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24675
+             Address     00a1.b2c3.d001
+             Cost        3
+             Port        664 (Port-channel1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32867  (priority 32768 sys-id-ext 99)
+             Address     00a1.b2c3.d002
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/3              Desg FWD 4         128.3    P2p
+Gi1/0/4              Desg FWD 4         128.4    P2p
+Po1                  Root FWD 3         128.664  P2p

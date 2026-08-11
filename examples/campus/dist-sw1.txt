@@ -1,0 +1,168 @@
+dist-sw1#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+Compiled Tue 11-Jul-23 05:00 by mcpre
+
+ROM: IOS-XE ROMMON
+
+dist-sw1 uptime is 8 weeks, 5 days, 2 hours, 12 minutes
+Uptime for this control processor is 8 weeks, 5 days, 2 hours, 14 minutes
+System returned to ROM by Reload Command
+System restarted at 10:04:18 UTC Mon Jun 16 2025
+System image file is "flash:packages.conf"
+
+
+cisco C9300-24P (X86) processor with 1367424K/6147K bytes of memory.
+Processor board ID FOC2540X0C1
+2 Virtual Ethernet interfaces
+28 Gigabit Ethernet interfaces
+Configuration register is 0x102
+
+dist-sw1#show cdp neighbors detail
+-------------------------
+Device ID: core-sw1.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: cisco C9500-16X,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet1/0/3
+Holdtime : 152 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.1
+
+-------------------------
+Device ID: core-sw2.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: cisco C9500-16X,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet1/0/3
+Holdtime : 144 sec
+
+Version :
+Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.2
+
+-------------------------
+Device ID: acc-sw1.campus.example.com
+Entry address(es):
+  IP address: 10.0.0.21
+Platform: cisco WS-C2960X-24TS-L,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/23,  Port ID (outgoing port): GigabitEthernet1/0/24
+Holdtime : 139 sec
+
+Version :
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3
+
+advertisement version: 2
+Duplex: full
+Management address(es):
+  IP address: 10.0.0.21
+
+Total cdp entries displayed : 3
+
+dist-sw1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+Vlan99                 10.0.0.11       YES manual up                    up
+GigabitEthernet1/0/1   unassigned      YES unset  up                    up
+GigabitEthernet1/0/2   unassigned      YES unset  up                    up
+GigabitEthernet1/0/23  unassigned      YES unset  up                    up
+
+dist-sw1#show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active
+10   users                            active    Gi1/0/23
+20   voice                            active    Gi1/0/23
+30   servers                          active    Gi1/0/23
+99   mgmt                             active    Gi1/0/23
+
+dist-sw1#show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24586
+             Address     00a1.b2c3.d001
+             Cost        4
+             Port        1 (GigabitEthernet1/0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     00a1.b2c3.d011
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/1              Root FWD 4         128.1    P2p
+Gi1/0/2              Altn BLK 4         128.2    P2p
+Gi1/0/23             Desg FWD 4         128.23   P2p
+
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24596
+             Address     00a1.b2c3.d001
+             Cost        4
+             Port        1 (GigabitEthernet1/0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     00a1.b2c3.d011
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/1              Root FWD 4         128.1    P2p
+Gi1/0/2              Altn BLK 4         128.2    P2p
+Gi1/0/23             Desg FWD 4         128.23   P2p
+
+VLAN0030
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24606
+             Address     00a1.b2c3.d002
+             Cost        4
+             Port        2 (GigabitEthernet1/0/2)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32798  (priority 32768 sys-id-ext 30)
+             Address     00a1.b2c3.d011
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/1              Altn BLK 4         128.1    P2p
+Gi1/0/2              Root FWD 4         128.2    P2p
+Gi1/0/23             Desg FWD 4         128.23   P2p
+
+VLAN0099
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    24675
+             Address     00a1.b2c3.d001
+             Cost        4
+             Port        1 (GigabitEthernet1/0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32867  (priority 32768 sys-id-ext 99)
+             Address     00a1.b2c3.d011
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+-------------------- ---- --- --------- -------- --------------------------------
+Gi1/0/1              Root FWD 4         128.1    P2p
+Gi1/0/2              Altn BLK 4         128.2    P2p
+Gi1/0/23             Desg FWD 4         128.23   P2p

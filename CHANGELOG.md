@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `examples/campus/`: a runnable six-switch capture set (ten devices once the
+  neighbor-only ones are counted, four VLANs, two distinct spanning trees) covering
+  every feature the L2 and STP views implement — port-channels, an uncaptured switch,
+  Edge/PortFast host ports, and a per-VLAN root that moves. Documented in
+  `examples/README.md`.
+- README: an **Example diagrams** section showing what `nettopo l2` and `nettopo stp`
+  actually produce from that capture set — the physical topology, the same topology
+  under `--endpoints network-only --link-mode port-channel`, and the spanning tree for
+  two VLANs with different roots. A table shows what each `--group-mode` writes for this
+  capture set.
+- `examples/campus/diagrams/`: the generated `.drawio` files themselves, plus white-
+  background PNG exports of the four the README embeds, so a reader sees the real Cisco
+  stencils, colors and per-end labels without installing anything. The README documents
+  both the `nettopo` commands that write the `.drawio` files and the draw.io CLI
+  invocation that exports them.
+- `tests/test_examples_campus.py`, which asserts the facts the README states about that
+  capture set — node/link counts, the two roots and their blocked ports, the dashed
+  uncaptured switch, and each `--group-mode`'s output. Without it, editing an example
+  capture or changing a view's output would leave the documented diagrams silently
+  wrong.
+
 ## [0.3.0] - 2026-08-11
 
 Neighbor identity resolution, port-channel awareness, and the STP view working against
