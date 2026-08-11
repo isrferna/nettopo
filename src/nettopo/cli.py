@@ -53,7 +53,7 @@ def _add_common_arguments(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--no-lucidify",
         action="store_true",
-        help="Skip the Lucidchart-friendliness post-process on generated draw.io files.",
+        help="Skip the link-label post-process on generated draw.io files.",
     )
 
 
