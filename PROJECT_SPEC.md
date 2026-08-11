@@ -485,7 +485,10 @@ render-ready nodes/links. Views never parse text and never write files.
   Each group is drawn as a **virtual gateway node** — the address hosts point at — with
   one link to each router that offers it, labeled with that router's SVI, role and
   priority, colored green for active and amber for standby; the active router is
-  highlighted. A diagram covers one VLAN and every group on it. Because a grouped diagram
+  highlighted. Each router node also carries its **own** SVI address in that VLAN, read
+  from `Device.interfaces` (i.e. from `show ip interface brief`/`show interfaces`) — `show
+  standby brief` names only the active and standby routers by address, so a listening
+  member could not otherwise be placed. A diagram covers one VLAN and every group on it. Because a grouped diagram
   renders one representative VLAN (as the STP view does) and the virtual IP is precisely
   what differs between grouped VLANs, the gateway node names the VLAN it was drawn from.
 - **`bgp`** — nodes = devices (labeled with ASN), edges = BGP sessions labeled with state;

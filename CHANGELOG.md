@@ -20,8 +20,13 @@ Phase 5: HSRP.
   matching group under `--group-mode`. Each HSRP group is drawn as a **virtual gateway**
   node — the address hosts actually point at — with one link to every router that offers
   it, labeled with that router's SVI, role and priority and colored green for active,
-  amber for standby. The active router is highlighted. Several groups on one SVI (two
-  gateways load-sharing a VLAN) share a diagram.
+  amber for standby. The active router is highlighted. Each router node also carries its
+  **own** SVI address in that VLAN beside the virtual one, so both halves of the first hop
+  are on the page; that address comes from `show ip interface brief`/`show interfaces`,
+  because `show standby brief` names only the active and standby routers by address and a
+  merely listening member appears in it nowhere. A capture with neither command leaves the
+  node labeled with its name alone. Several groups on one SVI (two gateways load-sharing a
+  VLAN) share a diagram.
 - `nettopo hsrp -i <dir> [--vlan N | --group-mode per-vlan|strict|topology] [--all]` is
   real, writing `output/hsrp/hsrp_vlan10.drawio` (or `hsrp_vlans-10_20.drawio` for a
   group) on the same naming rule as `stp`.

@@ -7,9 +7,11 @@ active; it says nothing about which cable joins them, and the segment they share
 broadcast domain rather than a set of point-to-point links. So this view does not go to
 `model.links` at all (the STP view's whole difficulty). Each HSRP group is drawn as a
 **virtual gateway node** -- the address hosts actually point at -- with one link to each
-router that offers it, labeled with that router's SVI, role and priority. What the reader
-needs from an HSRP diagram is which box answers for the gateway and which one takes over,
-and that is exactly what a star around the virtual IP shows.
+router that offers it, labeled with that router's SVI, role and priority. Every router
+also carries its own SVI address under its name, so the diagram shows both halves of the
+first hop: the address hosts are configured with, and the real addresses behind it. What
+the reader needs from an HSRP diagram is which box answers for the gateway and which one
+takes over, and that is exactly what a star around the virtual IP shows.
 
 A diagram covers one VLAN and every HSRP group configured on it, since one SVI can carry
 several groups (load-sharing across two gateways). Grouping is therefore per VLAN too: a
@@ -28,7 +30,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from nettopo.model.entities import DeviceRole, HsrpGroup, HsrpRole, NetworkModel
+from nettopo.model.entities import DeviceRole, HsrpGroup, HsrpMember, HsrpRole, NetworkModel
 from nettopo.model.grouping import GroupMode, hsrp_fingerprint
 from nettopo.views.diagram import (
     Diagram,
@@ -130,23 +132,19 @@ def _build_nodes(model: NetworkModel, hsrp_groups: list[HsrpGroup]) -> list[Diag
         for hsrp_group in hsrp_groups
     ]
 
-    active_devices = {
-        member.device
-        for hsrp_group in hsrp_groups
-        for member in hsrp_group.members.values()
-        if member.role is HsrpRole.ACTIVE
-    }
-    member_devices = {
-        member.device for hsrp_group in hsrp_groups for member in hsrp_group.members.values()
-    }
+    members_by_device: dict[str, list[HsrpMember]] = defaultdict(list)
+    for hsrp_group in hsrp_groups:
+        for member in hsrp_group.members.values():
+            members_by_device[member.device].append(member)
+
     nodes.extend(
         DiagramNode(
             id=hostname,
-            label=hostname,
+            label=_member_label(model, hostname, members[0].interface),
             role=_node_role(model, hostname),
-            highlight=hostname in active_devices,
+            highlight=any(member.role is HsrpRole.ACTIVE for member in members),
         )
-        for hostname in sorted(member_devices)
+        for hostname, members in sorted(members_by_device.items())
     )
     return nodes
 
@@ -157,6 +155,25 @@ def _gateway_label(hsrp_group: HsrpGroup) -> str:
     if hsrp_group.virtual_ip is None:
         return heading
     return f"{heading}\n{hsrp_group.virtual_ip}"
+
+
+def _member_label(model: NetworkModel, hostname: str, interface: str) -> str:
+    """Name the router, over the address its own SVI holds in this VLAN.
+
+    The real address beside the virtual one is what tells a reader which box a given
+    traceroute hop or ping reply came from -- and it is the only address at all for a
+    member that is neither active nor standby, since `show standby brief` names those two
+    routers by address and no one else. It is read off `Device.interfaces`, populated by
+    `show ip interface brief`/`show interfaces`, so a capture carrying neither leaves the
+    node labeled with its name alone rather than inventing one.
+
+    Any of the router's members will do for `interface`: a diagram covers one VLAN, so
+    every group in it sits on that VLAN's single SVI.
+    """
+    device = model.devices.get(hostname)
+    svi = device.interfaces.get(interface) if device is not None else None
+    address = svi.ip_address if svi is not None else None
+    return f"{hostname}\n{address}" if address else hostname
 
 
 def _node_role(model: NetworkModel, hostname: str) -> DeviceRole:

@@ -153,8 +153,11 @@ def test_hsrp_diagram_matches_the_readme(campus: NetworkModel) -> None:
     (diagram_group,) = hsrp_view.build_groups(campus, vlan=10)
     diagram = diagram_group.diagram
 
-    (gateway, *_routers) = diagram.nodes
-    assert gateway.label == "VLAN 10 group 10\n10.10.10.1"
+    assert [node.label for node in diagram.nodes] == [
+        "VLAN 10 group 10\n10.10.10.1",
+        "core-sw1\n10.10.10.2",  # each router's own SVI address, beside the virtual one
+        "core-sw2\n10.10.10.3",
+    ]
     assert [node.id for node in diagram.nodes if node.highlight] == ["core-sw1"]
     assert [(link.source, link.src_label, link.color) for link in diagram.links] == [
         ("core-sw1", "Vl10 active/150", _HSRP_ACTIVE_COLOR),

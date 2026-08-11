@@ -10,6 +10,8 @@ from nettopo.model.entities import (
     HsrpGroup,
     HsrpMember,
     HsrpRole,
+    Interface,
+    InterfaceType,
     NetworkModel,
 )
 from nettopo.model.grouping import GroupMode
@@ -17,6 +19,15 @@ from nettopo.views import hsrp
 
 _ACTIVE_COLOR = "#2E7D32"
 _STANDBY_COLOR = "#EF6C00"
+
+
+def _router(hostname: str, vlan: int, address: str | None) -> Device:
+    """A source device whose SVI for `vlan` holds `address`, as `show ip int brief` reports."""
+    device = Device(hostname=hostname, is_source=True, role=DeviceRole.L3_SWITCH)
+    device.interfaces[f"Vl{vlan}"] = Interface(
+        name=f"Vl{vlan}", type=InterfaceType.SVI, ip_address=address
+    )
+    return device
 
 
 def _member(device: str, vlan: int, group: int, priority: int, role: HsrpRole) -> HsrpMember:
@@ -45,8 +56,8 @@ def _pair_model() -> NetworkModel:
     """Two gateways, active/standby on VLAN 10 and swapped on VLAN 30."""
     model = NetworkModel(
         devices={
-            "gw-a": Device(hostname="gw-a", is_source=True, role=DeviceRole.L3_SWITCH),
-            "gw-b": Device(hostname="gw-b", is_source=True, role=DeviceRole.L3_SWITCH),
+            "gw-a": _router("gw-a", 10, "10.0.10.2"),
+            "gw-b": _router("gw-b", 10, "10.0.10.3"),
         }
     )
     model.hsrp = dict(
@@ -106,6 +117,77 @@ def test_links_carry_the_svi_role_and_priority_and_are_colored_by_role() -> None
 
     assert (active.src_label, active.color) == ("Vl10 active/150", _ACTIVE_COLOR)
     assert (standby.src_label, standby.color) == ("Vl10 standby/100", _STANDBY_COLOR)
+
+
+def test_each_router_carries_its_own_svi_address_under_its_name() -> None:
+    """The real addresses, beside the virtual one, say which box a given hop actually is."""
+    (diagram_group,) = hsrp.build_groups(_pair_model(), vlan=10)
+    (_gateway, gw_a, gw_b) = diagram_group.diagram.nodes
+
+    assert gw_a.label == "gw-a\n10.0.10.2"
+    assert gw_b.label == "gw-b\n10.0.10.3"
+
+
+def test_a_router_whose_svi_address_is_unknown_is_labeled_with_its_name_alone() -> None:
+    """`show standby brief` carries no addresses of its own, so a capture without
+    `show ip interface brief` leaves nothing to show rather than an invented address."""
+    model = NetworkModel(devices={"gw-a": Device(hostname="gw-a", is_source=True)})
+    model.hsrp = dict([_group(10, 10, "10.0.10.1", _member("gw-a", 10, 10, 100, HsrpRole.ACTIVE))])
+
+    (diagram_group,) = hsrp.build_groups(model, vlan=10)
+    (_gateway, router) = diagram_group.diagram.nodes
+    assert router.label == "gw-a"
+
+
+def test_every_member_shows_its_address_including_the_listening_ones() -> None:
+    """Four routers, one active, one standby, two listening.
+
+    The two listeners are the case that needs `show ip interface brief`: `show standby
+    brief` names the active and standby routers by address and no one else, so nothing
+    else in the captures could place them.
+    """
+    model = NetworkModel(
+        devices={
+            hostname: _router(hostname, 10, address)
+            for hostname, address in (
+                ("gw-a", "10.0.10.2"),
+                ("gw-b", "10.0.10.3"),
+                ("gw-c", "10.0.10.4"),
+                ("gw-d", "10.0.10.5"),
+            )
+        }
+    )
+    model.hsrp = dict(
+        [
+            _group(
+                10,
+                10,
+                "10.0.10.1",
+                _member("gw-a", 10, 10, 150, HsrpRole.ACTIVE),
+                _member("gw-b", 10, 10, 140, HsrpRole.STANDBY),
+                _member("gw-c", 10, 10, 100, HsrpRole.LISTEN),
+                _member("gw-d", 10, 10, 90, HsrpRole.LISTEN),
+            )
+        ]
+    )
+
+    (diagram_group,) = hsrp.build_groups(model, vlan=10)
+    diagram = diagram_group.diagram
+
+    assert [node.label for node in diagram.nodes] == [
+        "VLAN 10 group 10\n10.0.10.1",
+        "gw-a\n10.0.10.2",
+        "gw-b\n10.0.10.3",
+        "gw-c\n10.0.10.4",
+        "gw-d\n10.0.10.5",
+    ]
+    assert [(link.source, link.src_label, link.color) for link in diagram.links] == [
+        ("gw-a", "Vl10 active/150", _ACTIVE_COLOR),
+        ("gw-b", "Vl10 standby/140", _STANDBY_COLOR),
+        ("gw-c", "Vl10 listen/100", None),
+        ("gw-d", "Vl10 listen/90", None),
+    ]
+    assert [node.id for node in diagram.nodes if node.highlight] == ["gw-a"]
 
 
 def test_only_the_active_router_is_highlighted() -> None:

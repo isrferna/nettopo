@@ -12,6 +12,13 @@ Processor board ID FCW2445L0AB
 2 Gigabit Ethernet interfaces
 Configuration register is 0x0
 
+gw-b#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan10                 10.0.10.3       YES manual up                    up
+Vlan20                 10.0.20.3       YES manual up                    up
+Vlan30                 10.0.30.3       YES manual up                    up
+Vlan40                 10.0.40.3       YES manual up                    up
+
 gw-b#show standby brief
                      P indicates configured to preempt.
                      |

@@ -169,12 +169,14 @@ differ. That is precisely the line between the two grouping modes:
 The core pair also runs HSRP on VLANs 10, 20 and 30, aligned with the spanning trees:
 `core-sw1` is active where it is root, `core-sw2` is active for VLAN 30. The rounded box
 is not a device — it is the virtual gateway `10.10.10.1`, the address the VLAN's hosts are
-configured with. Each router links to it labeled with its SVI, HSRP role and priority:
-green for the router currently answering, amber for the one waiting to take over. The
-active router carries the same gold card the STP view gives a root bridge.
+configured with. Each router carries its own SVI address (`10.10.10.2`, `10.10.10.3`)
+under its name, so both halves of the first hop are on the page, and links to the gateway
+labeled with its SVI, HSRP role and priority: green for the router currently answering,
+amber for the one waiting to take over. The active router carries the same gold card the
+STP view gives a root bridge.
 
-![HSRP for VLAN 10: core-sw1 active with priority 150 on a green link to the virtual
-gateway 10.10.10.1, core-sw2 standby with priority 100 on an amber
+![HSRP for VLAN 10: core-sw1 at 10.10.10.2 active with priority 150 on a green link to the
+virtual gateway 10.10.10.1, core-sw2 at 10.10.10.3 standby with priority 100 on an amber
 link](examples/campus/diagrams/hsrp/hsrp_vlan10.png)
 
 Source: [`hsrp/hsrp_vlan10.drawio`](examples/campus/diagrams/hsrp/hsrp_vlan10.drawio).
@@ -334,10 +336,10 @@ filesystem-safe name listing every VLAN it covers, e.g.
 ### `nettopo hsrp`
 
 Renders per-VLAN HSRP diagrams: which routers offer the VLAN's default gateway, which one
-currently answers for it, and at what priority. Needs only `show standby brief` in the
-captures — unlike `stp`, this view draws no physical links, so no neighbor-discovery
-command is required (`show version` still helps, by naming each device from its own
-capture rather than from its filename).
+currently answers for it, at what priority, and on which address. Needs only `show standby
+brief` in the captures — unlike `stp`, this view draws no physical links, so no
+neighbor-discovery command is required (`show version` still helps, by naming each device
+from its own capture rather than from its filename).
 
 Each HSRP group is drawn as a **virtual gateway**: a plain rounded box labeled with the
 VLAN, the group number and the virtual IP. It is deliberately not given a Cisco icon,
@@ -345,6 +347,14 @@ because it is an address rather than a device. Every router running that group l
 it, labeled `Vl10 active/150` — its SVI, HSRP role and priority — with the link colored
 green when that router is active for the group and amber when it is the standby. The
 active router itself is highlighted with a gold card.
+
+Each router is also labeled with **its own SVI address** in that VLAN, beside the virtual
+one, which is what tells you which box a given traceroute hop or ping reply actually is.
+That address comes from `show ip interface brief` (or `show interfaces`), not from `show
+standby brief` — the brief output names only the active and standby routers, and only by
+address, so a member that is merely listening cannot be placed from it at all. Add one of
+those two commands to the captures and every member gets its address; without them the
+nodes are labeled with their names alone rather than a guess.
 
 One VLAN is one diagram, including when its SVI carries **several groups**: two gateways
 load-sharing a VLAN (each active for one group, standby for the other) is one picture with
@@ -402,7 +412,7 @@ is what each subcommand needs to produce a *complete* result.
 | `parse` | — | every command in the next table; each fills its own CSV table or columns |
 | `l2` | `show cdp neighbors detail` and/or `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (only for `--link-mode port-channel`) |
 | `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (**required** when links are bundled) · `show lldp neighbors detail` (to identify a root bridge outside the captures) |
-| `hsrp` | `show standby brief` | `show version` (device naming) |
+| `hsrp` | `show standby brief` | `show ip interface brief` / `show interfaces` (each member's own SVI address on its node) · `show version` (device naming) |
 | `bgp` | `show ip bgp summary` — *not yet implemented (Phase 6)* | |
 
 > **`stp` needs CDP/LLDP too.** `show spanning-tree` reports a device's *own* bridge and
@@ -425,7 +435,7 @@ What each command contributes, whichever subcommand you run:
 | `show version` | `platform`, `model`, `os` and `serial` in `devices.csv`, and the canonical hostname every neighbor's spelling is correlated onto — without it that name falls back to the prompt line, which is usually the same |
 | `show cdp neighbors detail` | Links between devices (`neighbors.csv`, and the links in both the L2 and STP diagrams), plus each neighbor's role/icon, platform and management IP |
 | `show lldp neighbors detail` | The same, for neighbors that don't speak CDP. Where both describe one adjacency, CDP wins |
-| `show ip interface brief` | `interfaces.csv`: admin/operational state and IP per interface |
+| `show ip interface brief` | `interfaces.csv`: admin/operational state and IP per interface — including the SVI addresses the HSRP diagrams label their routers with |
 | `show interfaces` | `interfaces.csv`: descriptions, precise IP/prefix, link state. Richer than `show ip interface brief` and wins where the two overlap |
 | `show vlan brief` | `vlans.csv` |
 | `show spanning-tree` | `stp.csv` and the STP diagrams: bridge IDs, base and effective priority, per-port role/state |

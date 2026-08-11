@@ -442,7 +442,7 @@ parsed captures in `tests/test_views_stp.py` and `tests/fixtures/stp_topology/`.
 |---|---|---|---|---|
 | L2 | `views/l2.py` | `model.devices`, `model.links` | `--endpoints all\|network-only`, `--link-mode physical\|port-channel` | one `Diagram` |
 | STP | `views/stp.py` | `model.stp`, `model.links`, `model.devices` | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per topology group |
-| HSRP | `views/hsrp.py` | `model.hsrp`, `model.devices` | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per matching group |
+| HSRP | `views/hsrp.py` | `model.hsrp`, `model.devices` (for each member's SVI address) | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per matching group |
 | BGP | `views/bgp.py` | — | — | not yet implemented (Phase 6) |
 
 ### Why the STP view cross-references `model.links`
@@ -474,6 +474,17 @@ or amber for standby. The gateway node is deliberately `DeviceRole.UNKNOWN`, whi
 `render/icons.py` draws as a plain box: it is an address, not a device, and giving it a
 Cisco icon would say otherwise. Its id is namespaced (`hsrp:vlan10:group10`) so it cannot
 collide with a member node, which is keyed by hostname.
+
+**Where each member's own address comes from.** A router node is labeled with the address
+its SVI holds in that VLAN, beside the group's virtual one, because that is what identifies
+the box behind a traceroute hop or a ping reply. `show standby brief` cannot supply it:
+its Active and Standby columns name those two routers by address and no one else, so in a
+group with four members the two that are merely listening have no address anywhere in that
+output. The view therefore reads `Device.interfaces[svi].ip_address`, populated by
+`parsing/interfaces.py` from `show ip interface brief`/`show interfaces` — data the model
+already held, joined rather than re-parsed. A capture with neither command leaves the node
+labeled with its name alone. Any of a router's members supplies the SVI name to look up:
+a diagram covers one VLAN, so every group in it sits on that VLAN's single SVI.
 
 A diagram covers one VLAN and **every** group on it, because one SVI can carry several
 (two gateways load-sharing a VLAN, each active for one group). That also fixes the unit of
