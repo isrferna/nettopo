@@ -30,16 +30,31 @@ from __future__ import annotations
 from collections import defaultdict
 from enum import Enum
 
-from nettopo.model.entities import Link, NetworkModel
+from nettopo.model.entities import DeviceRole, Link, NetworkModel
 from nettopo.views.diagram import (
     Diagram,
     DiagramLink,
     DiagramNode,
+    LegendEntry,
     join_interfaces,
     members_tooltip,
 )
 
 _NETWORK_CAPABILITIES = {"Router", "Switch"}
+
+# Insertion order is the order the legend lists them: network gear from the core outward,
+# then the endpoints.
+_ROLE_LABELS: dict[DeviceRole, str] = {
+    DeviceRole.ROUTER: "Router",
+    DeviceRole.L3_SWITCH: "Layer 3 switch",
+    DeviceRole.SWITCH: "Switch",
+    DeviceRole.FIREWALL: "Firewall",
+    DeviceRole.AP: "Access point",
+    DeviceRole.SERVER: "Server",
+    DeviceRole.HOST: "Host",
+    DeviceRole.PHONE: "IP phone",
+    DeviceRole.UNKNOWN: "Unidentified device",
+}
 
 
 class LinkMode(Enum):
@@ -75,7 +90,20 @@ def build(
         device = model.devices[hostname]
         diagram.nodes.append(DiagramNode(id=hostname, label=hostname, role=device.role))
     diagram.links = _diagram_links(model, links, link_mode)
+    diagram.legend = _legend(diagram)
     return diagram
+
+
+def _legend(diagram: Diagram) -> list[LegendEntry]:
+    """Name every device role the diagram actually drew, in a stable order.
+
+    Only roles present are listed: a key that explains icons the reader cannot see is
+    noise, and the L2 view's whole point is which kinds of device are out there.
+    """
+    present = {node.role for node in diagram.nodes}
+    return [
+        LegendEntry(label=_ROLE_LABELS[role], role=role) for role in _ROLE_LABELS if role in present
+    ]
 
 
 def _included_devices(model: NetworkModel, *, endpoints: str) -> set[str]:

@@ -230,7 +230,9 @@ def test_cdp_and_lldp_reporting_one_adjacency_produce_a_single_link() -> None:
 def test_a_non_source_neighbor_seen_short_and_as_an_fqdn_is_one_device() -> None:
     model = _build_nxos_model()
     assert "esxi-host03.example.com" not in model.devices
-    assert model.devices["esxi-host03"].role is DeviceRole.HOST
+    # `VMware ESXi` is a hypervisor, so the platform overrides the `Host` capability its
+    # neighbors report -- which is the whole point of classifying on the chassis.
+    assert model.devices["esxi-host03"].role is DeviceRole.SERVER
 
 
 def test_port_channel_membership_is_recorded_on_both_the_bundle_and_its_members() -> None:

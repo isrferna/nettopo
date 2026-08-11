@@ -33,12 +33,12 @@ end to end under [Example diagrams](#example-diagrams), generated from the captu
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
-> **Pending manual step:** Cisco `mxgraph.cisco.*` draw.io stencils are a confirmed
+> **Pending manual step:** Cisco `mxgraph.cisco19.*` draw.io icons are a confirmed
 > requirement but may degrade on Lucidchart import (Lucid uses a different shape
-> library). This still needs a real Lucid import to validate — Phase 4 proceeded on the
-> same rendering approach without it, since that validation requires interactive Lucid
-> access this project's automation doesn't have — see the checklist in
-> [`docs/architecture.md`](docs/architecture.md#known-limitation-to-validate-early-cisco-icons-under-lucid-import).
+> library, and these icons are drawn by draw.io's own code rather than looked up as
+> named stencils). This still needs a real Lucid import to validate, which requires
+> interactive Lucid access this project's automation doesn't have — see the checklist in
+> [`docs/architecture.md`](docs/architecture.md#known-limitation-cisco-icons-under-lucid-import).
 
 ## Installation
 
@@ -89,9 +89,11 @@ drawio -x -f png -s 2 -b 20 -o examples/campus/diagrams/l2/l2_full.png examples/
 ### `nettopo l2` — physical topology
 
 Ten nodes, thirteen links; each link is labeled with the physical interface at each end,
-and each node is styled by the role its neighbors reported over CDP/LLDP (the two core
-switches advertise `Router Switch`, so they get the router icon; `esxi-host01/02`
-advertise `Host`).
+and each node is drawn with the icon for its role. The role comes from the chassis the
+device reports — `cisco C9500-16X` for the core pair, `cisco WS-C2960X` for the access
+switches, `cisco ISR4331/K9` for `edge-rtr`, `VMware ESX` for the two ESXi hosts — falling
+back to the capabilities its neighbors advertised over CDP/LLDP when the platform names
+nothing recognizable. A legend names every role the diagram actually contains.
 
 ![L2 topology of the campus example: ten devices, thirteen links, each end labeled with
 its physical interface](examples/campus/diagrams/l2/l2_full.png)
@@ -115,16 +117,16 @@ Source:
 ### `nettopo stp --vlan 10` — spanning tree for the user VLAN
 
 Switches only: `edge-rtr` and the two ESXi hosts are gone. `core-sw1` is the root bridge
-(gold border); every other node carries its bridge MAC and effective priority.
-`acc-sw3` has no capture of its own, so it is drawn dashed and labeled with its name
-alone — it is included because the port facing it (`dist-sw2 Gi1/0/22`) is not an Edge
+(gold card); every other node carries its bridge MAC and effective priority.
+`acc-sw3` has no capture of its own, so it is drawn faded, in italics, and labeled with its
+name alone — it is included because the port facing it (`dist-sw2 Gi1/0/22`) is not an Edge
 port, the same filter that keeps the ESXi hosts out. Green links forward at both ends;
 red links have a blocked end. The three blocked ports are what breaks the two loops in
-the topology.
+the topology. The legend lists only the markings this particular tree uses.
 
-![Spanning tree for VLAN 10: core-sw1 gold-bordered as root bridge, green forwarding
+![Spanning tree for VLAN 10: core-sw1 with a gold card as root bridge, green forwarding
 links, three red links with a blocked end, acc-sw3 drawn
-dashed](examples/campus/diagrams/stp/stp_vlan10.png)
+faded](examples/campus/diagrams/stp/stp_vlan10.png)
 
 Source: [`stp/stp_vlan10.drawio`](examples/campus/diagrams/stp/stp_vlan10.drawio).
 
@@ -262,7 +264,7 @@ interfaces in the link's hover tooltip: spanning-tree treats a bundle as one log
 so drawing one line per member would misrepresent it.
 
 Switches that appear only in a neighbor's CDP/LLDP output — no capture of their own — are
-included with a **dashed border** and labeled with their name alone, since there is no
+included **faded, in italics** and labeled with their name alone, since there is no
 bridge data to show for them. They are reached only through ports that are *not*
 Edge/PortFast, which is what keeps phones, access points and servers out of a
 spanning-tree diagram.

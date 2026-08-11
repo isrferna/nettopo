@@ -37,9 +37,26 @@ class DiagramLink:
 
 
 @dataclass
+class LegendEntry:
+    """One line of the diagram's key: a sample of some styling, and what it means.
+
+    A view declares meaning; `render/legend.py` draws the sample by calling the very same
+    style functions the diagram itself uses, so a legend cannot drift from the picture it
+    explains.
+    """
+
+    label: str
+    role: DeviceRole | None = None  # sample is this role's icon
+    color: str | None = None  # sample is a link line in this color
+    highlight: bool = False
+    inferred: bool = False
+
+
+@dataclass
 class Diagram:
     nodes: list[DiagramNode] = field(default_factory=list)
     links: list[DiagramLink] = field(default_factory=list)
+    legend: list[LegendEntry] = field(default_factory=list)
 
 
 def join_interfaces(interface_names: Iterable[str]) -> str:

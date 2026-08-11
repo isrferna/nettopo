@@ -9,7 +9,7 @@ other end. Two things follow from having to join those two sources:
   only under the bundle's name, and the members collapse into a single drawn link.
 - **Nodes are of two kinds.** A device we hold a capture for is drawn from its own
   `StpBridge` (MAC and priority, highlighted when it is the root). A device seen only in a
-  neighbor's CDP/LLDP output is drawn dashed and unlabeled beyond its name, because
+  neighbor's CDP/LLDP output is drawn faded and unlabeled beyond its name, because
   everything else about it would be inference. Such a device is included only through a
   non-Edge STP port: PortFast marks the ports facing hosts, and without that filter every
   phone and access point in the network would land in a spanning-tree diagram.
@@ -40,6 +40,7 @@ from nettopo.views.diagram import (
     Diagram,
     DiagramLink,
     DiagramNode,
+    LegendEntry,
     join_interfaces,
     members_tooltip,
 )
@@ -144,7 +145,33 @@ def _build_diagram(model: NetworkModel, stp_vlan: StpVlan) -> Diagram:
     diagram.nodes = _build_nodes(model, stp_vlan, edges)
     diagram.links = [edge.to_diagram_link() for edge in edges]
     diagram.links.sort(key=lambda link: (link.source, link.target, link.src_label))
+    diagram.legend = _legend(diagram)
     return diagram
+
+
+def _legend(diagram: Diagram) -> list[LegendEntry]:
+    """Explain the four markings this view adds on top of the plain topology.
+
+    Each is listed only when the diagram uses it, so a converged tree with nothing blocked
+    does not advertise a red that never appears. The root bridge entry borrows whichever
+    role the root itself was drawn with, so the sample is the icon the reader is looking
+    for rather than a generic one.
+    """
+    entries: list[LegendEntry] = []
+    root = next((node for node in diagram.nodes if node.highlight), None)
+    if root is not None:
+        entries.append(LegendEntry(label="Root bridge", role=root.role, highlight=True))
+
+    inferred = next((node for node in diagram.nodes if node.inferred), None)
+    if inferred is not None:
+        entries.append(LegendEntry(label="No capture held", role=inferred.role, inferred=True))
+
+    colors = {link.color for link in diagram.links}
+    if _FORWARDING_COLOR in colors:
+        entries.append(LegendEntry(label="Forwarding at both ends", color=_FORWARDING_COLOR))
+    if _BLOCKING_COLOR in colors:
+        entries.append(LegendEntry(label="Blocked at one end", color=_BLOCKING_COLOR))
+    return entries
 
 
 def _build_edges(model: NetworkModel, stp_vlan: StpVlan) -> list[_StpEdge]:
