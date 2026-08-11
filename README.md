@@ -66,15 +66,17 @@ Requires Python 3.11+.
 [`examples/campus/`](examples/campus) is a complete, self-contained capture set for a
 six-switch campus: two core switches joined by a port-channel, two distribution
 switches, two access switches, plus an edge router, two ESXi hosts and a third access
-switch that no capture covers — ten devices in total. Every image below is nettopo's own
-output, and the `.drawio` files behind them are committed in
-[`examples/campus/diagrams/`](examples/campus/diagrams). Regenerate them with:
+switch that no capture covers — ten devices in total. It is the source of every diagram
+below except the last, which comes from the smaller
+[`examples/hsrp-quad/`](examples/hsrp-quad). Every image is nettopo's own output, and the
+`.drawio` files behind them are committed next to the captures. Regenerate them with:
 
 ```bash
 nettopo l2   -i examples/campus -o examples/campus/diagrams
 nettopo l2   -i examples/campus -o examples/campus/diagrams --endpoints network-only --link-mode port-channel
 nettopo stp  -i examples/campus -o examples/campus/diagrams --all
 nettopo hsrp -i examples/campus -o examples/campus/diagrams --all
+nettopo hsrp -i examples/hsrp-quad -o examples/hsrp-quad/diagrams --all
 ```
 
 The PNGs are exports of those same files, made with
@@ -190,6 +192,37 @@ configured with different priorities, so:
 | `nettopo hsrp -i examples/campus --all` | `hsrp_vlan10`, `hsrp_vlan20`, `hsrp_vlan30` |
 | `nettopo hsrp -i examples/campus --all --group-mode strict` | unchanged — 10 and 20 differ on priority |
 | `nettopo hsrp -i examples/campus --all --group-mode topology` | `hsrp_vlans-10_20`, `hsrp_vlan30` — priorities ignored, so 10 and 20 collapse |
+
+### A group with four members — active, standby, and two listening
+
+A two-switch gateway pair is the common case, but an HSRP group can have any number of
+members and only ever two of them are named: one active, one standby. Everybody else sits
+in **Listen**, watching the hellos and waiting for an election.
+[`examples/hsrp-quad/`](examples/hsrp-quad) is a small capture set for exactly that — VLAN
+50 spans two buildings, each with a pair of layer-3 switches, and all four share one
+group:
+
+| Router | SVI address | Priority | State |
+|---|---|---|---|
+| `bldg-a-sw1` | `10.20.50.2` | 150 | Active — highlighted, green link |
+| `bldg-a-sw2` | `10.20.50.3` | 140 | Standby — amber link |
+| `bldg-b-sw1` | `10.20.50.4` | 110 | Listen — neutral link |
+| `bldg-b-sw2` | `10.20.50.5` | 100 | Listen — neutral link |
+
+![HSRP for VLAN 50 with four members: the virtual gateway 10.20.50.1 in the middle, the
+active bldg-a-sw1 on a green link, the standby bldg-a-sw2 on an amber link, and two
+listening switches on neutral gray links](examples/hsrp-quad/diagrams/hsrp/hsrp_vlan50.png)
+
+Source: [`hsrp/hsrp_vlan50.drawio`](examples/hsrp-quad/diagrams/hsrp/hsrp_vlan50.drawio).
+
+The two listeners are why every node carries its **own** address and not just the virtual
+one. `show standby brief` reports the active and standby routers by address — that is
+what its Active and Standby columns are — but it never names anyone else, so
+`10.20.50.4` and `10.20.50.5` appear nowhere in any of the four captures' HSRP output.
+They come from `show ip interface brief` instead, which is why that command is worth
+capturing even though the HSRP view needs no topology. The legend lists only the two
+colors this group uses; a neutral link means the router is in the group but neither
+answering for it nor next in line.
 
 ## Usage
 

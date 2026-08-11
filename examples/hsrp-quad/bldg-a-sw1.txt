@@ -1,0 +1,27 @@
+bldg-a-sw1#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+
+bldg-a-sw1 uptime is 8 weeks, 1 day, 4 hours, 12 minutes
+System returned to ROM by Reload Command
+System image file is "flash:packages.conf"
+
+cisco C9500-16X (X86) processor with 1867264K/6147K bytes of memory.
+Processor board ID FCW2445L0AA
+16 Ten Gigabit Ethernet interfaces
+Configuration register is 0x102
+
+bldg-a-sw1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Vlan1                  unassigned      YES NVRAM  administratively down down
+Vlan50                 10.20.50.2       YES manual up                    up
+TenGigabitEthernet1/0/1 unassigned     YES unset  up                    up
+TenGigabitEthernet1/0/2 unassigned     YES unset  up                    up
+
+bldg-a-sw1#show standby brief
+                     P indicates configured to preempt.
+                     |
+Interface   Grp  Pri P State   Active          Standby         Virtual IP
+Vl50        50   150 P Active  local           10.20.50.3      10.20.50.1

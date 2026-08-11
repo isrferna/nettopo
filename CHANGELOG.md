@@ -42,6 +42,13 @@ Phase 5: HSRP.
   VLAN 20's priorities offset so `--group-mode strict` and `topology` differ here too.
   The generated diagrams are committed under `examples/campus/diagrams/hsrp/` and the
   README embeds one.
+- `examples/hsrp-quad/`: four layer-3 switches sharing one HSRP group on VLAN 50 — active,
+  standby and **two listening** — for the shape the campus set's gateway pair cannot show.
+  It is also what demonstrates where the node addresses come from: `show standby brief`
+  names the active and standby routers by address and nobody else, so the two listeners'
+  addresses appear in no HSRP output anywhere in that capture set. Documented in
+  `examples/README.md`, embedded in the README, and pinned by
+  `tests/test_examples_hsrp_quad.py`.
 
 ### Changed
 

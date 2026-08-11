@@ -1,8 +1,11 @@
 # Examples
 
 Runnable capture sets. Unlike `tests/fixtures/`, which holds the smallest input that
-exercises one parser, these are complete networks meant to be run end to end — they are
-the source of the diagrams in the [top-level README](../README.md#example-diagrams).
+exercises one parser, these are networks meant to be run end to end — they are the source
+of the diagrams in the [top-level README](../README.md#example-diagrams).
+
+`campus/` is the general-purpose one, exercising every view. `hsrp-quad/` exists for a
+single shape the campus set cannot show: an HSRP group with more than two members.
 
 ## `campus/`
 
@@ -36,5 +39,32 @@ it: the `.drawio` files nettopo writes, plus PNG exports of the five the README 
 `FileDataSource` reads only regular files in the capture directory, so this subdirectory
 is invisible to ingestion. Both regeneration steps are documented in the
 [top-level README](../README.md#example-diagrams).
+
+## `hsrp-quad/`
+
+Four layer-3 switches sharing one HSRP group on VLAN 50 — a VLAN spanning two buildings,
+each with a switch pair:
+
+| Device | SVI address | Priority | State |
+|---|---|---|---|
+| `bldg-a-sw1` | `10.20.50.2` | 150 | Active |
+| `bldg-a-sw2` | `10.20.50.3` | 140 | Standby |
+| `bldg-b-sw1` | `10.20.50.4` | 110 | Listen |
+| `bldg-b-sw2` | `10.20.50.5` | 100 | Listen |
+
+The campus set has the usual two-router gateway pair, where active and standby account for
+everyone. This one exists because a group can have any number of members while `show
+standby brief` names only those two by address — so the two listening switches are the
+case that proves the diagram's addresses come from `show ip interface brief` and not from
+the HSRP output.
+
+Deliberately narrow: these captures carry `show version`, `show ip interface brief` and
+`show standby brief` and nothing else, because no other command contributes to an HSRP
+diagram. `nettopo l2` and `nettopo stp` on this directory produce empty diagrams, which is
+correct — there is no neighbor-discovery or spanning-tree data to draw.
+
+```bash
+nettopo hsrp -i examples/hsrp-quad -o examples/hsrp-quad/diagrams --all
+```
 
 Every value in these files is synthetic — hostnames, serials, MACs and IPs alike.
