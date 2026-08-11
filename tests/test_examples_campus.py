@@ -5,7 +5,8 @@ describes them in prose. Both the images and that prose are committed artifacts:
 else would fail if an example capture were edited or a view's output changed shape, so
 the section would quietly become fiction. These tests assert the handful of facts the
 README states outright: the two node/link counts, the STP root and blocked ports of the
-two distinct trees, the dashed uncaptured switch, and what each `--group-mode` writes.
+two distinct trees, the dashed uncaptured switch, the HSRP gateway pair and the roles and
+priorities on its links, and what each `--group-mode` writes for either view.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from nettopo.ingest.files import FileDataSource
 from nettopo.ingest.model_builder import build_network_model
 from nettopo.model.entities import NetworkModel
 from nettopo.model.grouping import GroupMode
+from nettopo.views import hsrp as hsrp_view
 from nettopo.views import l2 as l2_view
 from nettopo.views import stp as stp_view
 from nettopo.views.diagram import Diagram
@@ -27,6 +29,8 @@ CAMPUS = Path(__file__).parent.parent / "examples" / "campus"
 
 _BLOCKING_COLOR = "#C62828"
 _FORWARDING_COLOR = "#2E7D32"
+_HSRP_ACTIVE_COLOR = "#2E7D32"
+_HSRP_STANDBY_COLOR = "#EF6C00"
 
 
 @pytest.fixture(scope="module")
@@ -141,4 +145,40 @@ def test_group_modes_match_the_readme_table(
 ) -> None:
     """VLAN 99 shares 10/20's tree but not core-sw2's priority, which is what splits the modes."""
     groups = stp_view.build_groups(campus, group_mode=group_mode)
+    assert [group.vlan_ids for group in groups] == expected
+
+
+def test_hsrp_diagram_matches_the_readme(campus: NetworkModel) -> None:
+    """VLAN 10's gateway is core-sw1, active at priority 150, standing in for 10.10.10.1."""
+    (diagram_group,) = hsrp_view.build_groups(campus, vlan=10)
+    diagram = diagram_group.diagram
+
+    (gateway, *_routers) = diagram.nodes
+    assert gateway.label == "VLAN 10 group 10\n10.10.10.1"
+    assert [node.id for node in diagram.nodes if node.highlight] == ["core-sw1"]
+    assert [(link.source, link.src_label, link.color) for link in diagram.links] == [
+        ("core-sw1", "Vl10 active/150", _HSRP_ACTIVE_COLOR),
+        ("core-sw2", "Vl10 standby/100", _HSRP_STANDBY_COLOR),
+    ]
+
+
+def test_hsrp_active_gateway_follows_the_spanning_tree_root(campus: NetworkModel) -> None:
+    """VLAN 30 is rooted on core-sw2, and its gateway is active there too."""
+    (diagram_group,) = hsrp_view.build_groups(campus, vlan=30)
+    assert [node.id for node in diagram_group.diagram.nodes if node.highlight] == ["core-sw2"]
+
+
+@pytest.mark.parametrize(
+    ("group_mode", "expected"),
+    [
+        (GroupMode.PER_VLAN, [(10,), (20,), (30,)]),
+        (GroupMode.STRICT, [(10,), (20,), (30,)]),
+        (GroupMode.TOPOLOGY, [(10, 20), (30,)]),
+    ],
+)
+def test_hsrp_group_modes_match_the_readme_table(
+    campus: NetworkModel, group_mode: GroupMode, expected: list[tuple[int, ...]]
+) -> None:
+    """VLANs 10 and 20 share their active/standby split and differ only in priority."""
+    groups = hsrp_view.build_groups(campus, group_mode=group_mode)
     assert [group.vlan_ids for group in groups] == expected

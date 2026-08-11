@@ -24,10 +24,19 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 
 from nettopo.ingest.base import Capture, DataSource
-from nettopo.model.entities import Device, DeviceRole, Interface, Link, NetworkModel, StpVlan
+from nettopo.model.entities import (
+    Device,
+    DeviceRole,
+    HsrpGroup,
+    Interface,
+    Link,
+    NetworkModel,
+    StpVlan,
+)
 from nettopo.model.platforms import classify_platform
 from nettopo.parsing.cdp import parse_cdp
 from nettopo.parsing.etherchannel import PortChannelCapture, parse_port_channels
+from nettopo.parsing.hsrp import parse_hsrp
 from nettopo.parsing.interfaces import interface_type, parse_interfaces
 from nettopo.parsing.lldp import parse_lldp
 from nettopo.parsing.spanning_tree import parse_spanning_tree
@@ -163,6 +172,17 @@ def _populate_source_devices(
             # them settles it -- including when the root is a device we hold no capture
             # for and `root_device` therefore stays None.
             stp_vlan.root_mac = stp_vlan.root_mac or stp_capture.bridge.root_mac
+
+        for hsrp_capture in parse_hsrp(hostname, capture.raw_text, platform=platform):
+            key = (hsrp_capture.vlan, hsrp_capture.group)
+            hsrp_group = model.hsrp.setdefault(
+                key, HsrpGroup(vlan=hsrp_capture.vlan, group=hsrp_capture.group)
+            )
+            hsrp_group.members[hostname] = hsrp_capture.member
+            # Every member of a group advertises the same virtual address, so the first
+            # one to report it settles it -- including when the member holding the
+            # address is one we have no capture for.
+            hsrp_group.virtual_ip = hsrp_group.virtual_ip or hsrp_capture.virtual_ip
 
     return hostname_by_hint
 

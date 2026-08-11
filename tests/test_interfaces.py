@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from nettopo.utils.interfaces import looks_like_interface, normalize
+from nettopo.utils.interfaces import looks_like_interface, normalize, svi_vlan
 
 # Long-form input -> expected canonical output, one row per PROJECT_SPEC.md section 5.
 LONG_FORM_CASES = [
@@ -116,3 +116,20 @@ def test_free_text_does_not_look_like_an_interface(raw: str) -> None:
 
 def test_does_not_mutate_numeric_suffix() -> None:
     assert normalize("GigabitEthernet1/0/48") == "Gi1/0/48"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Vl10", 10),
+        ("Vlan10", 10),
+        ("vlan999", 999),
+        ("Gi1/0/1", None),
+        ("Po1", None),
+        ("Vl10.5", None),  # a subinterface of an SVI is not itself the SVI
+        ("Vlan", None),
+        ("", None),
+    ],
+)
+def test_svi_vlan_reads_the_vlan_out_of_an_svi_name(raw: str, expected: int | None) -> None:
+    assert svi_vlan(raw) == expected

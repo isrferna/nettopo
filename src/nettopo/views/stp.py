@@ -41,8 +41,10 @@ from nettopo.views.diagram import (
     DiagramLink,
     DiagramNode,
     LegendEntry,
+    VlanDiagramGroup,
     join_interfaces,
     members_tooltip,
+    vlan_diagram_filename,
 )
 
 logger = logging.getLogger("nettopo")
@@ -55,15 +57,9 @@ _BLOCKING_COLOR = "#C62828"
 _BLOCKING_STATES = frozenset({StpState.BLK, StpState.BKN})
 
 
-@dataclass
-class StpDiagramGroup:
-    vlan_ids: tuple[int, ...]  # sorted ascending; every VLAN this rendered diagram covers
-    diagram: Diagram
-
-
 def build_groups(
     model: NetworkModel, *, group_mode: GroupMode = GroupMode.PER_VLAN, vlan: int | None = None
-) -> list[StpDiagramGroup]:
+) -> list[VlanDiagramGroup]:
     """Build one `Diagram` per VLAN, or per topology group under `group_mode`.
 
     `vlan` restricts output to a single VLAN's diagram, ignoring `group_mode` (the CLI
@@ -73,31 +69,26 @@ def build_groups(
         stp_vlan = model.stp.get(vlan)
         if stp_vlan is None:
             return []
-        return [StpDiagramGroup(vlan_ids=(vlan,), diagram=_build_diagram(model, stp_vlan))]
+        return [VlanDiagramGroup(vlan_ids=(vlan,), diagram=_build_diagram(model, stp_vlan))]
 
     members_by_fingerprint: dict[tuple[object, ...], list[StpVlan]] = defaultdict(list)
     for stp_vlan in model.stp.values():
         members_by_fingerprint[stp_fingerprint(stp_vlan, group_mode)].append(stp_vlan)
 
-    groups: list[StpDiagramGroup] = []
+    groups: list[VlanDiagramGroup] = []
     for members in members_by_fingerprint.values():
         members.sort(key=lambda stp_vlan: stp_vlan.vlan)
         vlan_ids = tuple(member.vlan for member in members)
-        groups.append(StpDiagramGroup(vlan_ids=vlan_ids, diagram=_build_diagram(model, members[0])))
+        groups.append(
+            VlanDiagramGroup(vlan_ids=vlan_ids, diagram=_build_diagram(model, members[0]))
+        )
     groups.sort(key=lambda group: group.vlan_ids)
     return groups
 
 
 def stp_output_filename(vlan_ids: tuple[int, ...]) -> str:
-    """Derive the `output/stp/` filename for a diagram covering `vlan_ids`.
-
-    `vlan_ids` are ints from the parsed model, not user/path input, so no additional
-    sanitization is needed beyond the deterministic, sorted, filesystem-safe format
-    PROJECT_SPEC.md section 6 specifies.
-    """
-    if len(vlan_ids) == 1:
-        return f"stp_vlan{vlan_ids[0]}.drawio"
-    return f"stp_vlans-{'_'.join(str(vlan_id) for vlan_id in vlan_ids)}.drawio"
+    """Derive the `output/stp/` filename for a diagram covering `vlan_ids`."""
+    return vlan_diagram_filename("stp", vlan_ids)
 
 
 @dataclass(frozen=True)

@@ -59,6 +59,31 @@ class Diagram:
     legend: list[LegendEntry] = field(default_factory=list)
 
 
+@dataclass
+class VlanDiagramGroup:
+    """One rendered diagram, and every VLAN it stands for.
+
+    Shared by the two per-VLAN views: `--group-mode` collapses VLANs that would render
+    identically into a single diagram, so what either view returns is a diagram plus the
+    set of VLANs it covers, and `cli.py` drives both through the same code path.
+    """
+
+    vlan_ids: tuple[int, ...]  # sorted ascending
+    diagram: Diagram
+
+
+def vlan_diagram_filename(view_name: str, vlan_ids: tuple[int, ...]) -> str:
+    """Derive the `output/<view_name>/` filename for a diagram covering `vlan_ids`.
+
+    `vlan_ids` are ints from the parsed model, not user/path input, so no additional
+    sanitization is needed beyond the deterministic, sorted, filesystem-safe format
+    PROJECT_SPEC.md section 6 specifies.
+    """
+    if len(vlan_ids) == 1:
+        return f"{view_name}_vlan{vlan_ids[0]}.drawio"
+    return f"{view_name}_vlans-{'_'.join(str(vlan_id) for vlan_id in vlan_ids)}.drawio"
+
+
 def join_interfaces(interface_names: Iterable[str]) -> str:
     """Label one end of a drawn link that stands for several physical interfaces."""
     return INTERFACE_SEPARATOR.join(dict.fromkeys(interface_names))

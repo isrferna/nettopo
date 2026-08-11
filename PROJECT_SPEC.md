@@ -171,7 +171,7 @@ Input is a **directory**. Each file is one device's captured output containing s
 | L2 | `show cdp neighbors detail`, `show lldp neighbors detail`, `show etherchannel summary` (IOS/IOS-XE) or `show port-channel summary` (NX-OS) |
 | L3/VLAN | `show ip interface brief`, `show interfaces`, `show vlan brief` |
 | STP | `show spanning-tree` (per-VLAN Rapid-PVST), **plus** the L2 discovery commands: spanning-tree output carries a device's own bridge and port states but never names the device on the other end of a port, so the STP view takes its links from the CDP/LLDP topology. `show etherchannel summary` is required whenever links are bundled — spanning-tree names the port-channel (`Po1`) while CDP/LLDP name its members (`Gi1/0/1`), and only the bundle table joins the two. `show lldp neighbors detail` additionally lets an out-of-capture root bridge be identified, since its chassis address is the only thing that can be matched against the reported root address |
-| HSRP | `show standby brief` (and `show standby` if detail needed) |
+| HSRP | `show standby brief` — its shipped template captures every column the model needs (interface, group, priority, preempt, state, virtual IP), so the per-group detail form `show standby` is not read |
 | BGP | `show ip bgp summary` |
 
 ---
@@ -282,7 +282,7 @@ class StpState(Enum):
 
 class HsrpRole(Enum):
     ACTIVE = "active"; STANDBY = "standby"; LISTEN = "listen"
-    INIT = "init"; SPEAK = "speak"
+    INIT = "init"; SPEAK = "speak"; LEARN = "learn"
 
 
 class BgpType(Enum):
@@ -417,6 +417,11 @@ class NetworkModel:
     bgp: list[BgpPeer] = field(default_factory=list)
 ```
 
+`NetworkModel.hsrp` is keyed by `(vlan, group)`, so a group configured on a routed port or
+a subinterface has no key to live under: `parsing/hsrp.py` skips it with a warning. That is
+a deliberate v1 limit matching the HSRP view's scope (§7, "switches and their SVIs"), not a
+parsing gap.
+
 ### Grouping (STP and HSRP) — `model/grouping.py`
 
 Three generation modes, exposed on the CLI as `--group-mode`:
@@ -432,6 +437,12 @@ configured priority alone. Equal priority does not guarantee equal topology (dif
 port costs or states can change the blocked link), and `strict` vs `topology` differ only
 in whether the priority values participate in the fingerprint. Both fingerprint functions
 live in `grouping.py` and are the most test-critical logic in the project (see §9).
+
+The fingerprint is per `StpVlan` for STP and per `HsrpGroup` for HSRP, but the unit being
+grouped is the **VLAN** in both cases, because that is what a diagram covers. One SVI can
+carry several HSRP groups (two gateways load-sharing a VLAN), so `views/hsrp.py` compares
+VLANs by their groups' fingerprints in group-number order — two VLANs group together only
+when their entire first-hop setup matches, group for group.
 
 Group output naming: `stp_vlan10.drawio` (per-vlan), and for grouped modes a stable,
 sorted, filesystem-safe name such as `stp_vlans-10_20_30.drawio`.
@@ -469,6 +480,14 @@ render-ready nodes/links. Views never parse text and never write files.
   and nothing is highlighted, so the diagram never guesses at a root.
 - **`hsrp`** — switches and their SVIs; per group show virtual IP, each member's priority
   and role (active/standby/listen). Honors `--group-mode` and `--vlan`.
+  HSRP is not a topology: `show standby brief` says who shares a virtual IP, never which
+  cable joins them, so unlike the STP view this one does not read `model.links` at all.
+  Each group is drawn as a **virtual gateway node** — the address hosts point at — with
+  one link to each router that offers it, labeled with that router's SVI, role and
+  priority, colored green for active and amber for standby; the active router is
+  highlighted. A diagram covers one VLAN and every group on it. Because a grouped diagram
+  renders one representative VLAN (as the STP view does) and the virtual IP is precisely
+  what differs between grouped VLANs, the gateway node names the VLAN it was drawn from.
 - **`bgp`** — nodes = devices (labeled with ASN), edges = BGP sessions labeled with state;
   iBGP vs eBGP styled differently. v1 shows the neighbor/session graph only.
 

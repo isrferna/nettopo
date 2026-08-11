@@ -11,17 +11,22 @@ from __future__ import annotations
 import argparse
 import logging
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from nettopo import __version__
 from nettopo.export.csv_export import write_csv_tables
 from nettopo.ingest.files import FileDataSource
 from nettopo.ingest.model_builder import build_network_model
+from nettopo.model.entities import NetworkModel
 from nettopo.model.grouping import GroupMode
 from nettopo.render.drawio import render_diagram
 from nettopo.utils.paths import resolve_output_root
+from nettopo.views import hsrp as hsrp_view
 from nettopo.views import l2 as l2_view
 from nettopo.views import stp as stp_view
+from nettopo.views.diagram import VlanDiagramGroup
 from nettopo.views.l2 import LinkMode
 
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -194,10 +199,34 @@ def _l2_output_filename(endpoints: str, link_mode: LinkMode) -> str:
     return f"{_L2_OUTPUT_STEMS[endpoints]}{suffix}.drawio"
 
 
-def _run_stp(args: argparse.Namespace) -> int:
-    """Ingest captures, populate the model, and render per-VLAN/grouped STP diagrams."""
+class _BuildVlanGroups(Protocol):
+    """The `build_groups` both per-VLAN views expose (`views/stp.py`, `views/hsrp.py`)."""
+
+    def __call__(
+        self, model: NetworkModel, *, group_mode: GroupMode, vlan: int | None
+    ) -> list[VlanDiagramGroup]: ...
+
+
+@dataclass(frozen=True)
+class _VlanDiagramView:
+    """One of the two per-VLAN views (`stp`, `hsrp`), as this module needs to drive it.
+
+    Both take the same `--vlan`/`--group-mode`/`--all` options and both return a
+    `VlanDiagramGroup` per diagram, so they share one handler; only the names, the two
+    functions, and any view-specific sanity check differ.
+    """
+
+    name: str  # the subcommand, and the `output/<name>/` subdirectory
+    label: str  # how the view is named in log messages
+    build_groups: _BuildVlanGroups
+    output_filename: Callable[[tuple[int, ...]], str]
+    warn_about: Callable[[VlanDiagramGroup], None] | None = None
+
+
+def _run_vlan_view(args: argparse.Namespace, view: _VlanDiagramView) -> int:
+    """Ingest captures, populate the model, and render `view`'s per-VLAN/grouped diagrams."""
     if args.vlan is None and not args.all:
-        logger.error("'stp' requires either --vlan <N> or --all.")
+        logger.error("'%s' requires either --vlan <N> or --all.", view.name)
         return 1
 
     try:
@@ -208,45 +237,79 @@ def _run_stp(args: argparse.Namespace) -> int:
         return 1
 
     group_mode = GroupMode(args.group_mode)
-    groups = stp_view.build_groups(model, group_mode=group_mode, vlan=args.vlan)
+    groups = view.build_groups(model, group_mode=group_mode, vlan=args.vlan)
 
     try:
         output_root = resolve_output_root(args.output)
         for group in groups:
-            output_path = output_root / "stp" / stp_view.stp_output_filename(group.vlan_ids)
+            output_path = output_root / view.name / view.output_filename(group.vlan_ids)
             render_diagram(group.diagram, output_path, apply_lucidify=not args.no_lucidify)
-            _log_stp_group(group, output_path)
+            _log_vlan_diagram(view, group, output_path)
+            if view.warn_about is not None:
+                view.warn_about(group)
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
 
-    logger.info("Rendered %d STP diagram(s) to %s", len(groups), output_root / "stp")
+    logger.info("Rendered %d %s diagram(s) to %s", len(groups), view.label, output_root / view.name)
     return 0
 
 
-def _log_stp_group(group: stp_view.StpDiagramGroup, output_path: Path) -> None:
-    """Report a diagram's size, and warn about the one shape that is always a mistake.
+def _log_vlan_diagram(view: _VlanDiagramView, group: VlanDiagramGroup, output_path: Path) -> None:
+    logger.info(
+        "Rendered %s diagram for VLAN(s) %s (%d node(s), %d link(s)) to %s",
+        view.label,
+        _vlan_list(group),
+        len(group.diagram.nodes),
+        len(group.diagram.links),
+        output_path,
+    )
+
+
+def _warn_about_stp_islands(group: VlanDiagramGroup) -> None:
+    """Warn about the one diagram shape that is always a mistake.
 
     A diagram with several switches and no links between them is what a silently dropped
     link looks like from the outside -- most often a port-channel the captures never
     described, since `show spanning-tree` names the bundle and CDP/LLDP name its members.
+    The HSRP view cannot produce this shape: it draws its own links, from each member to
+    its virtual gateway, rather than joining spanning-tree state to a discovered topology.
     """
-    diagram = group.diagram
-    logger.info(
-        "Rendered STP diagram for VLAN(s) %s (%d node(s), %d link(s)) to %s",
-        ", ".join(str(vlan_id) for vlan_id in group.vlan_ids),
-        len(diagram.nodes),
-        len(diagram.links),
-        output_path,
-    )
-    if len(diagram.nodes) > 1 and not diagram.links:
+    if len(group.diagram.nodes) > 1 and not group.diagram.links:
         logger.warning(
             "VLAN(s) %s: %d node(s) but no links. Re-run as 'nettopo --log-level DEBUG stp "
             "...' to see why each link was dropped; if the switches are joined by "
             "port-channels, check that the captures include 'show etherchannel summary'.",
-            ", ".join(str(vlan_id) for vlan_id in group.vlan_ids),
-            len(diagram.nodes),
+            _vlan_list(group),
+            len(group.diagram.nodes),
         )
+
+
+def _vlan_list(group: VlanDiagramGroup) -> str:
+    return ", ".join(str(vlan_id) for vlan_id in group.vlan_ids)
+
+
+_STP_VIEW = _VlanDiagramView(
+    name="stp",
+    label="STP",
+    build_groups=stp_view.build_groups,
+    output_filename=stp_view.stp_output_filename,
+    warn_about=_warn_about_stp_islands,
+)
+_HSRP_VIEW = _VlanDiagramView(
+    name="hsrp",
+    label="HSRP",
+    build_groups=hsrp_view.build_groups,
+    output_filename=hsrp_view.hsrp_output_filename,
+)
+
+
+def _run_stp(args: argparse.Namespace) -> int:
+    return _run_vlan_view(args, _STP_VIEW)
+
+
+def _run_hsrp(args: argparse.Namespace) -> int:
+    return _run_vlan_view(args, _HSRP_VIEW)
 
 
 def _run_unimplemented(args: argparse.Namespace) -> int:
@@ -259,7 +322,7 @@ _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "parse": _run_parse,
     "l2": _run_l2,
     "stp": _run_stp,
-    "hsrp": _run_unimplemented,
+    "hsrp": _run_hsrp,
     "bgp": _run_unimplemented,
     "all": _run_unimplemented,
 }

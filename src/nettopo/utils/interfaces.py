@@ -8,6 +8,8 @@ command happens to print (e.g. `Gi1/0/1` vs `GigabitEthernet1/0/1`).
 
 from __future__ import annotations
 
+import re
+
 _LONG_FORM_TO_CANONICAL: dict[str, str] = {
     "gigabitethernet": "Gi",
     "tengigabitethernet": "Te",
@@ -39,6 +41,8 @@ _INTERFACE_PREFIXES: tuple[str, ...] = (
     *(canonical.lower() for canonical in _CANONICAL_BY_LENGTH),
 )
 
+_SVI_NAME = re.compile(r"^Vl(?P<vlan_id>\d+)$")
+
 
 def looks_like_interface(name: str) -> bool:
     """Whether `name` is a recognized interface type immediately followed by a number.
@@ -55,6 +59,18 @@ def looks_like_interface(name: str) -> bool:
         if lowered.startswith(prefix) and lowered[len(prefix) : len(prefix) + 1].isdigit():
             return True
     return False
+
+
+def svi_vlan(name: str) -> int | None:
+    """The VLAN an SVI serves, or None if `name` is not an SVI.
+
+    The VLAN id is part of the interface's *name*, so reading it back out belongs to the
+    module that owns that naming rather than to whichever parser happens to need it: the
+    HSRP view keys its groups by VLAN and gets there from `Vl10`. Input is normalized
+    first, so `Vlan10` and `Vl10` answer alike; a subinterface (`Vl10.5`) is not an SVI.
+    """
+    match = _SVI_NAME.match(normalize(name))
+    return int(match.group("vlan_id")) if match else None
 
 
 def normalize(name: str) -> str:

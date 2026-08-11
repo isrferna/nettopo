@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 5: HSRP.
+
+### Added
+
+- Phase 5 HSRP parsing: `parsing/hsrp.py` reads `show standby brief` through
+  ntc-templates and populates `NetworkModel.hsrp` — one `HsrpGroup` per `(vlan, group)`,
+  carrying the virtual IP and each member's SVI, priority, role and preempt flag.
+  IOS and IOS-XE print the command identically and share the one template;
+  `tests/fixtures/hsrp/` carries a fixture for each.
+- Phase 5 HSRP view: `views/hsrp.py` builds one render-ready `Diagram` per VLAN, or per
+  matching group under `--group-mode`. Each HSRP group is drawn as a **virtual gateway**
+  node — the address hosts actually point at — with one link to every router that offers
+  it, labeled with that router's SVI, role and priority and colored green for active,
+  amber for standby. The active router is highlighted. Several groups on one SVI (two
+  gateways load-sharing a VLAN) share a diagram.
+- `nettopo hsrp -i <dir> [--vlan N | --group-mode per-vlan|strict|topology] [--all]` is
+  real, writing `output/hsrp/hsrp_vlan10.drawio` (or `hsrp_vlans-10_20.drawio` for a
+  group) on the same naming rule as `stp`.
+- `hsrp.csv` is populated: one row per member, with the group's virtual IP alongside the
+  member's SVI, priority, role and preempt flag.
+- `utils/interfaces.py` gains `svi_vlan()`, which reads the VLAN id back out of an SVI
+  name. Reading a VLAN out of `Vl10` is a property of the naming rule, so it belongs to
+  the module that owns it rather than to whichever parser needs it.
+- `HsrpRole.LEARN`, the one HSRP state the enum was missing. A member reported in it
+  would otherwise have been dropped.
+- The `examples/campus/` core pair now runs HSRP on VLANs 10/20/30, aligned with the
+  spanning trees (`core-sw1` active where it is root, `core-sw2` for VLAN 30), with
+  VLAN 20's priorities offset so `--group-mode strict` and `topology` differ here too.
+  The generated diagrams are committed under `examples/campus/diagrams/hsrp/` and the
+  README embeds one.
+
+### Changed
+
+- The two per-VLAN views now share their result type and filename rule
+  (`views/diagram.py`'s `VlanDiagramGroup` and `vlan_diagram_filename()`), and `cli.py`
+  drives both through one handler. `views/stp.py`'s `StpDiagramGroup` is now
+  `VlanDiagramGroup`; `stp_output_filename()` is unchanged.
+
 ## [0.4.0] - 2026-08-11
 
 Device roles inferred from the reported chassis, a modern Cisco icon set, and a legend

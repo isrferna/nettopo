@@ -133,6 +133,14 @@ VLAN Name                             Status    Ports
 30   servers                          active    Gi1/0/3, Gi1/0/4
 99   mgmt                             active    Gi1/0/3, Gi1/0/4
 
+core-sw2#show standby brief
+                     P indicates configured to preempt.
+                     |
+Interface   Grp  Pri P State    Active          Standby         Virtual IP
+Vl10        10   100 P Standby  10.10.10.2      local           10.10.10.1
+Vl20        20   90  P Standby  10.10.20.2      local           10.10.20.1
+Vl30        30   150 P Active   local           10.10.30.2      10.10.30.1
+
 core-sw2#show etherchannel summary
 Flags:  D - down        P - bundled in port-channel
         I - stand-alone s - suspended
