@@ -59,8 +59,18 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
 
 
 def _link_style(color: str | None) -> str:
-    """Return a draw.io style override for `color`, or "" to use N2G's default."""
-    return f"strokeColor={color};strokeWidth=2;" if color is not None else ""
+    """Return the draw.io style for a link, colored by `color` when there is one.
+
+    Spells out `endArrow=none` even though it repeats N2G's own default: N2G *substitutes*
+    its default for the style we pass rather than merging the two, so a colored link would
+    otherwise lose it and pick up draw.io's built-in arrowhead. Links are undirected in
+    every view -- the STP view orders an edge's ends by device name, so an arrow would
+    point somewhere that means nothing.
+    """
+    style = "endArrow=none;"
+    if color is not None:
+        style += f"strokeColor={color};strokeWidth=2;"
+    return style
 
 
 def _link_data(link: DiagramLink) -> dict[str, str]:
