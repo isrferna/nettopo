@@ -49,7 +49,7 @@ flowchart LR
 |---|---|
 | `ingest/` | Data sources. `base.py` defines the `DataSource` interface; `files.py` implements it over a directory of saved captures; `model_builder.py` wires parser output into a populated `NetworkModel`. |
 | `parsing/` | One parser per `show` command. Returns plain dataclasses/lists — never touches `NetworkModel` directly. |
-| `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP/HSRP fingerprint functions that decide which VLANs render identically. `platforms.py`: the product-family table that turns a reported chassis into a `DeviceRole`. |
+| `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP fingerprint function that decides which VLANs render identically. `platforms.py`: the product-family table that turns a reported chassis into a `DeviceRole`. |
 | `views/` | One module per diagram (`l2`, `stp`, `hsrp`; `bgp` pending). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
 | `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key), `lucidify.py` (Lucidchart-import post-process). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
@@ -402,12 +402,14 @@ it is not duplicated here to avoid the two documents drifting out of sync.
 
 ### Why grouping is a separate concern from views
 
-STP and HSRP views can be generated per-VLAN, or with VLANs grouped by resulting
-topology fingerprint (`strict` groups on exact configured priority + topology; `topology`
-groups on topology alone, ignoring priority). The fingerprint functions live in
-`model/grouping.py`, not in the view modules, because the notion of "these VLANs produce
-the same diagram" is a property of the model, independent of how that diagram is later
-rendered.
+The STP view can be generated per-VLAN, or with VLANs grouped by resulting topology
+fingerprint (`strict` groups on exact configured priority + topology; `topology` groups on
+topology alone, ignoring priority). The fingerprint function lives in `model/grouping.py`,
+not in the view module, because the notion of "these VLANs produce the same diagram" is a
+property of the model, independent of how that diagram is later rendered.
+
+Grouping applies to STP alone — see
+[Why the HSRP view has no `--group-mode`](#why-the-hsrp-view-has-no---group-mode) below.
 
 ### STP grouping flow
 
@@ -442,7 +444,7 @@ parsed captures in `tests/test_views_stp.py` and `tests/fixtures/stp_topology/`.
 |---|---|---|---|---|
 | L2 | `views/l2.py` | `model.devices`, `model.links` | `--endpoints all\|network-only`, `--link-mode physical\|port-channel` | one `Diagram` |
 | STP | `views/stp.py` | `model.stp`, `model.links`, `model.devices` | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per topology group |
-| HSRP | `views/hsrp.py` | `model.hsrp`, `model.devices` (for each member's SVI address) | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per matching group |
+| HSRP | `views/hsrp.py` | `model.hsrp`, `model.devices` (for each member's SVI address) | `--vlan` | one `Diagram` per VLAN |
 | BGP | `views/bgp.py` | — | — | not yet implemented (Phase 6) |
 
 ### Why the STP view cross-references `model.links`
@@ -487,21 +489,34 @@ labeled with its name alone. Any of a router's members supplies the SVI name to 
 a diagram covers one VLAN, so every group in it sits on that VLAN's single SVI.
 
 A diagram covers one VLAN and **every** group on it, because one SVI can carry several
-(two gateways load-sharing a VLAN, each active for one group). That also fixes the unit of
-grouping: `model/grouping.py` fingerprints one `HsrpGroup`, and the view compares two VLANs
-by their groups' fingerprints in group-number order, so VLANs group together only when
-their entire first-hop setup matches group for group.
+(two gateways load-sharing a VLAN, each active for one group).
 
-Grouped diagrams render one representative VLAN, exactly as the STP view does — but with
-one extra obligation. The virtual IP and the SVI name are precisely the two things that
-*must* differ between VLANs grouped under `strict` or `topology`, and the virtual IP is
-the headline fact of the whole diagram. So the gateway node names the VLAN it was drawn
-from (`VLAN 10 group 10` above `10.10.10.1`): a diagram that says which VLAN its address
-belongs to cannot be misread as claiming that address for every VLAN in the filename.
+### Why the HSRP view has no `--group-mode`
+
+Grouping is a claim that several VLANs render identically, and for STP it is a claim
+`model/grouping.py` can actually make good on (see below). For HSRP it never holds. What
+distinguishes one VLAN's first hop from another's is exactly the set of things the diagram
+exists to show: the virtual IP, the SVI name on every link label, and each router's own
+address in that VLAN. Two VLANs with the same members, roles and priorities still answer
+on two different gateway addresses.
+
+That leaves a grouped HSRP diagram only two shapes, both wrong. Render one representative
+VLAN — as `views/stp.py` legitimately does — and a file named `hsrp_vlans-10_20.drawio`
+silently drops VLAN 20's gateway address and SVI entirely. Merge them instead, and the
+same two boxes carry one gateway node and one address line per VLAN, so the star that made
+the picture readable disappears under a column of addresses.
+
+So `views/hsrp.py` takes `--vlan`/`--all` and nothing else, and the `hsrp` subparser
+rejects `--group-mode` outright rather than accepting an option it cannot honor. When the
+question really is "which VLANs have the same first-hop setup", `hsrp.csv` answers it
+without discarding anything: `export/csv_export.py` writes every `(vlan, group)` in the
+model. The gateway node still names its own VLAN (`VLAN 10 group 10` above `10.10.10.1`)
+because one SVI can carry several groups, and the address alone would not say which group
+the node stands for.
 
 ### Why grouped STP diagrams render one representative VLAN
 
-`model/grouping.py`'s fingerprints guarantee that VLANs grouped under `strict` or
+`model/grouping.py`'s fingerprint guarantees that VLANs grouped under `strict` or
 `topology` produce an identical rendered diagram — that is what "grouped" means (see
 [STP grouping flow](#stp-grouping-flow) above). `views/stp.py` exploits that guarantee:
 instead of re-deriving a merged diagram, it renders the lowest-numbered VLAN in each

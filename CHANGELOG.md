@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- `nettopo hsrp` no longer accepts `--group-mode`; it takes `--vlan N` or `--all` and
+  always writes one diagram per VLAN. Grouping asserts that several VLANs render
+  identically, which HSRP never satisfies: each VLAN has its own virtual IP and its own
+  SVI address on every router. A grouped run rendered the lowest VLAN of each group and
+  silently dropped the rest, so `hsrp_vlans-10_20.drawio` showed VLAN 10's gateway address
+  and none of VLAN 20's. Merging instead of dropping is no better — it stacks a gateway
+  node and an address line per VLAN onto the same two routers. `hsrp.csv` was, and stays,
+  the lossless per-VLAN view. `nettopo stp --group-mode` is unchanged: there the
+  fingerprint really does guarantee identical diagrams.
+- `model/grouping.py`'s `hsrp_fingerprint()`, which had no remaining caller.
+
 ## [0.5.0] - 2026-08-11
 
 Phase 5: HSRP. `nettopo hsrp` becomes the fourth real command, rendering per-VLAN

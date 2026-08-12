@@ -48,6 +48,14 @@ def test_vlan_and_group_mode_are_mutually_exclusive() -> None:
     assert excinfo.value.code == 2
 
 
+def test_hsrp_does_not_accept_group_mode() -> None:
+    """HSRP draws one diagram per VLAN, so there is nothing for the option to mean."""
+    parser = build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["hsrp", "-i", ".", "--all", "--group-mode", "topology"])
+    assert excinfo.value.code == 2
+
+
 @pytest.mark.parametrize("command", sorted(UNIMPLEMENTED_COMMANDS))
 def test_unimplemented_commands_report_not_implemented(command: str, tmp_path: Path) -> None:
     exit_code = main([command, "-i", str(tmp_path)])
@@ -209,32 +217,6 @@ def test_hsrp_command_with_all_writes_one_diagram_per_vlan(tmp_path: Path) -> No
     assert {path.name for path in (output_dir / "hsrp").iterdir()} == {
         "hsrp_vlan10.drawio",
         "hsrp_vlan20.drawio",
-        "hsrp_vlan30.drawio",
-        "hsrp_vlan40.drawio",
-    }
-
-
-def test_hsrp_command_with_all_and_group_mode_topology_groups_matching_vlans(
-    tmp_path: Path,
-) -> None:
-    """VLANs 10 and 20 share active/standby roles and differ only in priority."""
-    output_dir = tmp_path / "output"
-    exit_code = main(
-        [
-            "hsrp",
-            "-i",
-            str(HSRP_TOPOLOGY),
-            "-o",
-            str(output_dir),
-            "--all",
-            "--group-mode",
-            "topology",
-        ]
-    )
-
-    assert exit_code == 0
-    assert {path.name for path in (output_dir / "hsrp").iterdir()} == {
-        "hsrp_vlans-10_20.drawio",
         "hsrp_vlan30.drawio",
         "hsrp_vlan40.drawio",
     }

@@ -63,9 +63,10 @@ class Diagram:
 class VlanDiagramGroup:
     """One rendered diagram, and every VLAN it stands for.
 
-    Shared by the two per-VLAN views: `--group-mode` collapses VLANs that would render
-    identically into a single diagram, so what either view returns is a diagram plus the
-    set of VLANs it covers, and `cli.py` drives both through the same code path.
+    Shared by the two per-VLAN views so `cli.py` can drive both through the same code
+    path. The STP view's `--group-mode` collapses VLANs that would render identically
+    into a single diagram, so its groups may cover several; the HSRP view never groups,
+    so its groups always cover exactly one.
     """
 
     vlan_ids: tuple[int, ...]  # sorted ascending

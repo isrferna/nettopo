@@ -1,6 +1,6 @@
 """Per-VLAN HSRP view (PROJECT_SPEC.md section 7).
 
-Structurally the STP view's sibling -- same `--group-mode`/`--vlan` handling, same
+The STP view's sibling in shape -- same `--vlan`/`--all` selection, same
 `VlanDiagramGroup` result -- but it draws a different kind of graph, because HSRP is not a
 topology. `show standby brief` says which routers share a virtual IP and who is currently
 active; it says nothing about which cable joins them, and the segment they share is a
@@ -14,16 +14,14 @@ the reader needs from an HSRP diagram is which box answers for the gateway and w
 takes over, and that is exactly what a star around the virtual IP shows.
 
 A diagram covers one VLAN and every HSRP group configured on it, since one SVI can carry
-several groups (load-sharing across two gateways). Grouping is therefore per VLAN too: a
-VLAN's fingerprint is the fingerprint of each of its groups, so two VLANs group together
-only when their entire first-hop setup matches. `model/grouping.py` owns the per-group
-fingerprint itself, the same way it does for STP.
+several groups (load-sharing across two gateways).
 
-Grouped diagrams render one representative VLAN, exactly as the STP view does, so the
-labels name the VLAN they came from (`VLAN 10 group 10`, `Vl10`): under `--group-mode` the
-virtual IP and SVI name are the two things that necessarily differ between the grouped
-VLANs, and a diagram that says which VLAN it was drawn from cannot be misread as claiming
-that address for all of them.
+Unlike STP, this view offers no `--group-mode`: it always writes one diagram per VLAN.
+Grouping means renders-identically, and two VLANs' HSRP never does -- each has its own
+virtual IP and its own SVI address on every router, and the virtual IP is the headline
+fact of the whole picture. Collapsing them would either drop every VLAN but one, or repeat
+a stack of addresses per node until the star is unreadable. Whichever addresses are wanted
+side by side, `hsrp.csv` lists them all.
 """
 
 from __future__ import annotations
@@ -31,7 +29,6 @@ from __future__ import annotations
 from collections import defaultdict
 
 from nettopo.model.entities import DeviceRole, HsrpGroup, HsrpMember, HsrpRole, NetworkModel
-from nettopo.model.grouping import GroupMode, hsrp_fingerprint
 from nettopo.views.diagram import (
     Diagram,
     DiagramLink,
@@ -50,13 +47,12 @@ _STANDBY_COLOR = "#EF6C00"
 _GATEWAY_ROLE = DeviceRole.UNKNOWN
 
 
-def build_groups(
-    model: NetworkModel, *, group_mode: GroupMode = GroupMode.PER_VLAN, vlan: int | None = None
-) -> list[VlanDiagramGroup]:
-    """Build one `Diagram` per VLAN, or per matching group under `group_mode`.
+def build_groups(model: NetworkModel, *, vlan: int | None = None) -> list[VlanDiagramGroup]:
+    """Build one `Diagram` per VLAN, or just `vlan`'s when one is named.
 
-    `vlan` restricts output to a single VLAN's diagram, ignoring `group_mode` (the CLI
-    enforces these as mutually exclusive -- PROJECT_SPEC.md section 9).
+    Every group covers exactly one VLAN: this view never collapses VLANs into a shared
+    diagram (see the module docstring). The `VlanDiagramGroup` shape is kept all the same,
+    so `cli.py` drives this view and the STP view through one code path.
     """
     groups_by_vlan = _groups_by_vlan(model)
 
@@ -66,19 +62,10 @@ def build_groups(
             return []
         return [VlanDiagramGroup(vlan_ids=(vlan,), diagram=_build_diagram(model, hsrp_groups))]
 
-    vlans_by_fingerprint: dict[tuple[object, ...], list[int]] = defaultdict(list)
-    for vlan_id, hsrp_groups in groups_by_vlan.items():
-        vlans_by_fingerprint[_vlan_fingerprint(hsrp_groups, group_mode)].append(vlan_id)
-
-    diagram_groups = [
-        VlanDiagramGroup(
-            vlan_ids=tuple(sorted(vlan_ids)),
-            diagram=_build_diagram(model, groups_by_vlan[min(vlan_ids)]),
-        )
-        for vlan_ids in vlans_by_fingerprint.values()
+    return [
+        VlanDiagramGroup(vlan_ids=(vlan_id,), diagram=_build_diagram(model, hsrp_groups))
+        for vlan_id, hsrp_groups in sorted(groups_by_vlan.items())
     ]
-    diagram_groups.sort(key=lambda diagram_group: diagram_group.vlan_ids)
-    return diagram_groups
 
 
 def hsrp_output_filename(vlan_ids: tuple[int, ...]) -> str:
@@ -94,16 +81,6 @@ def _groups_by_vlan(model: NetworkModel) -> dict[int, list[HsrpGroup]]:
     for hsrp_groups in by_vlan.values():
         hsrp_groups.sort(key=lambda hsrp_group: hsrp_group.group)
     return by_vlan
-
-
-def _vlan_fingerprint(hsrp_groups: list[HsrpGroup], group_mode: GroupMode) -> tuple[object, ...]:
-    """Fingerprint identifying which other VLANs this VLAN's HSRP should be grouped with.
-
-    Ordered by group number rather than by fingerprint value, so two VLANs compare equal
-    only when their groups match up group-for-group -- and so the comparison never has to
-    order two fingerprints against each other, whose fields are not of one type.
-    """
-    return tuple(hsrp_fingerprint(hsrp_group, group_mode) for hsrp_group in hsrp_groups)
 
 
 def _build_diagram(model: NetworkModel, hsrp_groups: list[HsrpGroup]) -> Diagram:

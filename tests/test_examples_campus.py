@@ -6,7 +6,7 @@ else would fail if an example capture were edited or a view's output changed sha
 the section would quietly become fiction. These tests assert the handful of facts the
 README states outright: the two node/link counts, the STP root and blocked ports of the
 two distinct trees, the dashed uncaptured switch, the HSRP gateway pair and the roles and
-priorities on its links, and what each `--group-mode` writes for either view.
+priorities on its links, and what each `--group-mode` writes for the STP view.
 """
 
 from __future__ import annotations
@@ -171,17 +171,16 @@ def test_hsrp_active_gateway_follows_the_spanning_tree_root(campus: NetworkModel
     assert [node.id for node in diagram_group.diagram.nodes if node.highlight] == ["core-sw2"]
 
 
-@pytest.mark.parametrize(
-    ("group_mode", "expected"),
-    [
-        (GroupMode.PER_VLAN, [(10,), (20,), (30,)]),
-        (GroupMode.STRICT, [(10,), (20,), (30,)]),
-        (GroupMode.TOPOLOGY, [(10, 20), (30,)]),
-    ],
-)
-def test_hsrp_group_modes_match_the_readme_table(
-    campus: NetworkModel, group_mode: GroupMode, expected: list[tuple[int, ...]]
+def test_hsrp_writes_one_diagram_per_vlan_with_its_own_gateway_address(
+    campus: NetworkModel,
 ) -> None:
-    """VLANs 10 and 20 share their active/standby split and differ only in priority."""
-    groups = hsrp_view.build_groups(campus, group_mode=group_mode)
-    assert [group.vlan_ids for group in groups] == expected
+    """VLANs 10 and 20 share their active/standby split, but each keeps its own diagram:
+    grouping them could only show one of the two virtual IPs."""
+    groups = hsrp_view.build_groups(campus)
+
+    assert [group.vlan_ids for group in groups] == [(10,), (20,), (30,)]
+    assert [group.diagram.nodes[0].label for group in groups] == [
+        "VLAN 10 group 10\n10.10.10.1",
+        "VLAN 20 group 20\n10.10.20.1",
+        "VLAN 30 group 30\n10.10.30.1",
+    ]
