@@ -9,18 +9,23 @@ Four diagram views are produced from the same parsed data model:
 - **L2** — physical/link-layer topology from CDP/LLDP, with interface labels and MLAG.
 - **STP** — per-VLAN Rapid-PVST spanning-tree state (root, bridge IDs, priorities, port roles/states).
 - **HSRP** — first-hop redundancy per SVI (virtual IP, priority, active/standby/listen).
-- **BGP** — BGP neighbor (session) graph.
+- **BGP** — BGP neighbor (session) graph (AS numbers, session state, iBGP vs eBGP).
 
 > `nettopo` is a working title — see [`PROJECT_SPEC.md`](PROJECT_SPEC.md) section 1.
 
 ## Status
 
-**Phase 5 — HSRP.** `nettopo hsrp -i <dir>` now renders real per-VLAN first-hop-redundancy
-draw.io diagrams: each HSRP group is drawn as a virtual gateway carrying its virtual IP,
-with a link to every router that offers it labeled with that router's SVI, role and
-priority — green for active, amber for standby — and the active router highlighted. It
-takes the same `--vlan N` / `--group-mode per-vlan|strict|topology` / `--all` options as
-`stp`, and `hsrp.csv` is now populated. `nettopo stp -i <dir>` (Phase 4) renders per-VLAN
+**Phase 6 — BGP.** `nettopo bgp -i <dir>` now renders the BGP session graph: one diagram
+for the whole network, with each router labeled by its AS number, each session labeled
+with its state and colored blue for iBGP or purple for eBGP, and any peer no capture
+covers drawn faded and labeled by the address and AS the session named it by. It takes no
+view-specific options, and `bgp.csv` is now populated. `nettopo hsrp -i <dir>` (Phase 5)
+renders per-VLAN first-hop-redundancy diagrams: each HSRP group is drawn as a virtual
+gateway carrying its virtual IP, with a link to every router that offers it labeled with
+that router's SVI, role and priority — green for active, amber for standby — and the
+active router highlighted. It takes the same `--vlan N` /
+`--group-mode per-vlan|strict|topology` / `--all` options as
+`stp`. `nettopo stp -i <dir>` (Phase 4) renders per-VLAN
 spanning-tree diagrams: the root bridge is highlighted, links are colored by forwarding vs
 blocking port state and labeled with role/state at each end. `nettopo l2 -i <dir>`
 (Phase 3) renders devices styled with Cisco icons (`render/icons.py`) by inferred
@@ -29,9 +34,9 @@ blocking port state and labeled with role/state at each end. `nettopo l2 -i <dir
 post-processed by `lucidify` by default (`--no-lucidify` to skip it), which keeps each
 end's label attached to its own end of the link rather than merging both into one, and
 normalizes the geometry flag N2G gets wrong so the labels survive a Lucidchart import.
-`bgp` and `all` still report "not implemented". All three working views are shown
-end to end under [Example diagrams](#example-diagrams), generated from the capture set in
-[`examples/campus/`](examples/campus). See the delivery plan in
+`all` still reports "not implemented". Every working view is shown
+end to end under [Example diagrams](#example-diagrams), generated from the capture sets in
+[`examples/`](examples). See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
@@ -67,8 +72,9 @@ Requires Python 3.11+.
 six-switch campus: two core switches joined by a port-channel, two distribution
 switches, two access switches, plus an edge router, two ESXi hosts and a third access
 switch that no capture covers — ten devices in total. It is the source of every diagram
-below except the last, which comes from the smaller
-[`examples/hsrp-quad/`](examples/hsrp-quad). Every image is nettopo's own output, and the
+below except the last two, which come from the smaller
+[`examples/hsrp-quad/`](examples/hsrp-quad) and
+[`examples/bgp-edge/`](examples/bgp-edge). Every image is nettopo's own output, and the
 `.drawio` files behind them are committed next to the captures. Regenerate them with:
 
 ```bash
@@ -77,6 +83,7 @@ nettopo l2   -i examples/campus -o examples/campus/diagrams --endpoints network-
 nettopo stp  -i examples/campus -o examples/campus/diagrams --all
 nettopo hsrp -i examples/campus -o examples/campus/diagrams --all
 nettopo hsrp -i examples/hsrp-quad -o examples/hsrp-quad/diagrams --all
+nettopo bgp  -i examples/bgp-edge -o examples/bgp-edge/diagrams
 ```
 
 The PNGs are exports of those same files, made with
@@ -224,6 +231,33 @@ capturing even though the HSRP view needs no topology. The legend lists only the
 colors this group uses; a neutral link means the router is in the group but neither
 answering for it nor next in line.
 
+### `nettopo bgp` — who peers with whom, and where the AS boundary is
+
+The campus switches run no BGP, so this one comes from
+[`examples/bgp-edge/`](examples/bgp-edge): three routers in AS 65001 — two core, one edge
+— fully meshed over iBGP, with `edge-r1` holding the two eBGP sessions to the outside.
+
+![BGP session graph: core-r1, core-r2 and edge-r1 drawn as routers labeled AS 65001 and
+joined by three blue iBGP links labeled Established, with edge-r1 also joined by purple
+eBGP links to two faded boxes — 198.51.100.1 AS 65100, labeled Established, and
+203.0.113.9 AS 65200, labeled Idle](examples/bgp-edge/diagrams/bgp/bgp.png)
+
+Source: [`bgp/bgp.drawio`](examples/bgp-edge/diagrams/bgp/bgp.drawio).
+
+Each session is drawn once, though the mesh's three sessions are each reported twice —
+once by the router at each end. `show ip bgp summary` names the far end by IP and nothing
+else, so nettopo matches each peer address against the addresses the captures report in
+`show ip interface brief`: where it finds one, the two reports become one link between two
+named routers. `198.51.100.1` and `203.0.113.9` match nothing — no capture covers them —
+so they keep a node of their own, faded like any other device known only through someone
+else's report, and labeled with the address and AS number the session named them by.
+
+The state on each link is read from the summary's last column, which IOS overloads: it
+prints a prefix count for a session that is up and a state word for one that is not, so a
+count is reported as `Established` and anything else verbatim — `203.0.113.9` here never
+came up at all. `bgp.csv` carries the same data per reported session, both directions
+included.
+
 ## Usage
 
 ```
@@ -232,9 +266,9 @@ nettopo [--version] [--log-level LEVEL] <command> [options]
 
 Every command reads a **directory** of saved capture files (see
 [Preparing captures](#preparing-captures) below) and writes into an output directory,
-creating it if needed. `parse`, `l2`, `stp`, and `hsrp` are implemented; `bgp` and `all`
-are scaffolded but not yet implemented (running them prints `'<command>' is not
-implemented yet.` and exits with status 1 — see [Status](#status)).
+creating it if needed. `parse`, `l2`, `stp`, `hsrp` and `bgp` are implemented; `all` is
+scaffolded but not yet implemented (running it prints `'all' is not implemented yet.`
+and exits with status 1 — see [Status](#status)).
 
 ### Global options
 
@@ -250,7 +284,7 @@ implemented yet.` and exits with status 1 — see [Status](#status)).
 | `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
 | `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
 | `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
-| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`, `hsrp`; later `bgp`, `all`) — `parse` ignores it. |
+| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`, `hsrp`, `bgp`; later `all`) — `parse` ignores it. |
 
 ### `nettopo parse`
 
@@ -419,10 +453,42 @@ exactly what differs between the VLANs it covers — so the gateway node names t
 address belongs to (`VLAN 10 group 10`) rather than leaving the reader to assume the
 address applies to all of them. `hsrp.csv` has the per-VLAN detail.
 
-### `nettopo bgp`, `nettopo all` — not yet implemented
+### `nettopo bgp`
 
-These subcommands parse their arguments but every run currently exits with status 1 and
-logs `'<command>' is not implemented yet.`. They land in Phases 6–7 — see
+Renders the BGP neighbor (session) graph: which routers peer with which, in what AS, and
+whether each session is up. Needs only `show ip bgp summary` in the captures;
+`show ip interface brief` (or `show interfaces`) is what lets two captured routers be
+recognized as the two ends of one session rather than as four separate boxes.
+
+```bash
+nettopo bgp -i ./captures
+```
+
+There is one diagram for the whole network, at `output/bgp/bgp.drawio` — a fixed
+filename, since the command takes no view-specific options. BGP sessions do not partition
+into VLANs the way STP and HSRP do, so there is nothing for a `--vlan`/`--all` pair to
+select between; a network large enough to want splitting up wants it by AS or by region,
+which v1 does not model.
+
+Nodes are labeled with the router's name over its AS number, links with the session's
+state (`Established`, `Idle`, `Active`, …) and colored by session type — blue for iBGP,
+purple for eBGP. When both ends of a session were captured and they disagree about its
+state, both are shown (`Established / Active`), in device-name order.
+
+A peer whose address matches no captured interface keeps a node of its own, drawn faded
+and labeled with its address and AS number. `peer_device` in `bgp.csv` stays empty
+regardless: resolving a peer IP to a hostname in the *model* is out of scope for v1
+(see [`PROJECT_SPEC.md` §2](PROJECT_SPEC.md)), so the address matching is a drawing
+decision only and the CSV stays a faithful record of what each device reported.
+
+v1 draws the session graph and nothing more — no route tables, policies, communities or
+route-reflector modeling. Only the default VRF is read: `show ip bgp summary` covers it,
+and every row's `vrf` column is `default`.
+
+### `nettopo all` — not yet implemented
+
+This subcommand parses its arguments but every run currently exits with status 1 and
+logs `'all' is not implemented yet.`. It lands in Phase 7 — see
 [`PROJECT_SPEC.md` §14](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues).
 
 ### Preparing captures
@@ -446,7 +512,7 @@ is what each subcommand needs to produce a *complete* result.
 | `l2` | `show cdp neighbors detail` and/or `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (only for `--link-mode port-channel`) |
 | `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (**required** when links are bundled) · `show lldp neighbors detail` (to identify a root bridge outside the captures) |
 | `hsrp` | `show standby brief` | `show ip interface brief` / `show interfaces` (each member's own SVI address on its node) · `show version` (device naming) |
-| `bgp` | `show ip bgp summary` — *not yet implemented (Phase 6)* | |
+| `bgp` | `show ip bgp summary` | `show ip interface brief` / `show interfaces` (matches a peer's address to a captured router, so one session is drawn as one link) · `show version` (device naming) |
 
 > **`stp` needs CDP/LLDP too.** `show spanning-tree` reports a device's *own* bridge and
 > port roles/states, but never says who is on the other end of a port — on its own it
@@ -473,6 +539,7 @@ What each command contributes, whichever subcommand you run:
 | `show vlan brief` | `vlans.csv` |
 | `show spanning-tree` | `stp.csv` and the STP diagrams: bridge IDs, base and effective priority, per-port role/state |
 | `show standby brief` | `hsrp.csv` and the HSRP diagrams: each group's virtual IP, and each member's SVI, priority, role and preempt flag |
+| `show ip bgp summary` | `bgp.csv` and the BGP diagram: each session's peer address, both AS numbers, its state and whether it is iBGP or eBGP — plus the device's own `asn` in `devices.csv` |
 | `show etherchannel summary` (IOS/IOS-XE) · `show port-channel summary` (NX-OS) | `po_id`/`po_members` in `interfaces.csv`, and the bundles `l2 --link-mode port-channel` collapses links onto |
 
 A capture covering everything implemented today:
@@ -495,6 +562,8 @@ sw1-access#show spanning-tree
 sw1-access#show standby brief
 ...
 sw1-access#show etherchannel summary
+...
+sw1-access#show ip bgp summary
 ...
 ```
 

@@ -1,0 +1,40 @@
+edge-r1#show version
+Cisco IOS XE Software, Version 17.06.05
+Cisco IOS Software [Bengaluru], ASR1000 Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.6.5, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2022 by Cisco Systems, Inc.
+Compiled Thu 18-Aug-22 11:24 by mcpre
+
+ROM: IOS-XE ROMMON
+
+edge-r1 uptime is 9 weeks, 4 days, 1 hour, 58 minutes
+System returned to ROM by Reload Command
+System image file is "bootflash:packages.conf"
+
+cisco ASR1001-X (1RU) processor with 3985899K/6147K bytes of memory.
+Processor board ID JAE24170BB7
+6 Gigabit Ethernet interfaces
+32768K bytes of non-volatile configuration memory.
+Configuration register is 0x2102
+
+edge-r1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+GigabitEthernet0/0/0   10.0.0.10       YES NVRAM  up                    up
+GigabitEthernet0/0/1   10.0.0.14       YES NVRAM  up                    up
+GigabitEthernet0/0/2   198.51.100.2    YES NVRAM  up                    up
+GigabitEthernet0/0/3   203.0.113.10    YES NVRAM  up                    up
+Loopback0              10.255.0.3      YES NVRAM  up                    up
+
+edge-r1#show ip bgp summary
+BGP router identifier 10.255.0.3, local AS number 65001
+BGP table version is 214, main routing table version 214
+36 network entries using 8928 bytes of memory
+52 path entries using 7072 bytes of memory
+BGP using 16000 total bytes of memory
+BGP activity 72/36 prefixes, 96/44 paths, scan interval 60 secs
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65001   11196   11190      214    0    0 6w1d           36
+10.255.0.2      4        65001   11192   11186      214    0    0 6w1d           36
+198.51.100.1    4        65100   84210   12044      214    0    0 6w1d          812
+203.0.113.9     4        65200       0       0        0    0    0 never    Idle

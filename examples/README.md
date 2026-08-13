@@ -4,8 +4,9 @@ Runnable capture sets. Unlike `tests/fixtures/`, which holds the smallest input 
 exercises one parser, these are networks meant to be run end to end — they are the source
 of the diagrams in the [top-level README](../README.md#example-diagrams).
 
-`campus/` is the general-purpose one, exercising every view. `hsrp-quad/` exists for a
-single shape the campus set cannot show: an HSRP group with more than two members.
+`campus/` is the general-purpose one, exercising the L2, STP and HSRP views. The other two
+exist for a single shape the campus set cannot show: `hsrp-quad/` for an HSRP group with
+more than two members, and `bgp-edge/` for BGP, which the campus switches do not run.
 
 ## `campus/`
 
@@ -65,6 +66,34 @@ correct — there is no neighbor-discovery or spanning-tree data to draw.
 
 ```bash
 nettopo hsrp -i examples/hsrp-quad -o examples/hsrp-quad/diagrams --all
+```
+
+## `bgp-edge/`
+
+Three routers in AS 65001 — two core, one edge — fully meshed over iBGP, with the edge
+router holding the two eBGP sessions to the outside:
+
+| Device | Loopback | Sessions |
+|---|---|---|
+| `core-r1` | `10.255.0.1` | iBGP to `core-r2` and `edge-r1` |
+| `core-r2` | `10.255.0.2` | iBGP to `core-r1` and `edge-r1` |
+| `edge-r1` | `10.255.0.3` | iBGP to both cores, eBGP to AS 65100 (Established) and AS 65200 (Idle) |
+
+The mesh is what this set is for. Every one of its three sessions appears in two captures,
+once from each end, and the diagram has to draw each of them once — which it can only do
+by matching each peer address against the loopbacks the routers report in
+`show ip interface brief`. The two eBGP peers are the other half: no capture covers them,
+so they stay faded boxes labeled with the address and AS the session named them by, and
+the `Idle` one shows what a session that never came up looks like.
+
+Deliberately narrow, like `hsrp-quad/`: these captures carry `show version`,
+`show ip interface brief` and `show ip bgp summary` and nothing else, because no other
+command contributes to a BGP diagram. `nettopo l2` and `nettopo stp` on this directory
+produce empty diagrams, which is correct — there is no neighbor-discovery or
+spanning-tree data to draw.
+
+```bash
+nettopo bgp -i examples/bgp-edge -o examples/bgp-edge/diagrams
 ```
 
 Every value in these files is synthetic — hostnames, serials, MACs and IPs alike.

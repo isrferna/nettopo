@@ -7,6 +7,8 @@ from pathlib import Path
 
 from nettopo.export.csv_export import write_csv_tables
 from nettopo.model.entities import (
+    BgpPeer,
+    BgpType,
     Device,
     HsrpGroup,
     HsrpMember,
@@ -95,6 +97,56 @@ def test_empty_stp_hsrp_bgp_tables_are_header_only(tmp_path: Path) -> None:
     for name in ("stp.csv", "hsrp.csv", "bgp.csv"):
         lines = (csv_dir / name).read_text().splitlines()
         assert len(lines) == 1
+
+
+def test_bgp_csv_has_one_row_per_session_sorted_by_device_and_peer(tmp_path: Path) -> None:
+    model = _sample_model()
+    model.bgp = [
+        BgpPeer(
+            local_device="sw1",
+            local_asn=65001,
+            peer_ip="198.51.100.1",
+            peer_asn=65100,
+            state="Idle",
+            type=BgpType.EBGP,
+        ),
+        BgpPeer(
+            local_device="sw1",
+            local_asn=65001,
+            peer_ip="10.0.12.2",
+            peer_asn=65001,
+            state="Established",
+            type=BgpType.IBGP,
+        ),
+    ]
+    rows = _read_rows(write_csv_tables(model, tmp_path) / "bgp.csv")
+
+    assert [(row["peer_ip"], row["type"], row["state"]) for row in rows] == [
+        ("10.0.12.2", "ibgp", "Established"),
+        ("198.51.100.1", "ebgp", "Idle"),
+    ]
+    assert all(row["local_asn"] == "65001" and row["vrf"] == "default" for row in rows)
+
+
+def test_bgp_csv_leaves_peer_device_empty_on_every_row(tmp_path: Path) -> None:
+    """v1 does not resolve a peer IP to a hostname (PROJECT_SPEC.md section 2).
+
+    The BGP *view* matches addresses so it can draw one link between two captured
+    routers; this table stays a faithful record of what each device reported.
+    """
+    model = _sample_model()
+    model.bgp = [
+        BgpPeer(
+            local_device="sw1",
+            local_asn=65001,
+            peer_ip="10.0.12.2",
+            peer_asn=65001,
+            state="Established",
+            type=BgpType.IBGP,
+        )
+    ]
+    rows = _read_rows(write_csv_tables(model, tmp_path) / "bgp.csv")
+    assert all(row["peer_device"] == "" for row in rows)
 
 
 def test_formula_prefixed_cell_values_are_neutralized(tmp_path: Path) -> None:

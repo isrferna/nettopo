@@ -34,6 +34,7 @@ from nettopo.model.entities import (
     StpVlan,
 )
 from nettopo.model.platforms import classify_platform
+from nettopo.parsing.bgp import parse_bgp
 from nettopo.parsing.cdp import parse_cdp
 from nettopo.parsing.etherchannel import PortChannelCapture, parse_port_channels
 from nettopo.parsing.hsrp import parse_hsrp
@@ -183,6 +184,13 @@ def _populate_source_devices(
             # one to report it settles it -- including when the member holding the
             # address is one we have no capture for.
             hsrp_group.virtual_ip = hsrp_group.virtual_ip or hsrp_capture.virtual_ip
+
+        bgp_peers = parse_bgp(hostname, capture.raw_text, platform=platform)
+        model.bgp.extend(bgp_peers)
+        if bgp_peers:
+            # One `show ip bgp summary` covers one router in one AS, so every session it
+            # reports shares the local AS number -- any row settles the device's own.
+            device.asn = bgp_peers[0].local_asn
 
     return hostname_by_hint
 

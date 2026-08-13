@@ -64,7 +64,11 @@ returns 404). No rename needed for the v0.1.0 release.
   matching what N2G does today.
 - BGP route tables, policies, communities, route-reflector modeling. v1 is the
   **session graph only**.
-- BGP `peer_device` resolution (peer IP → hostname). Left as `None` in v1.
+- BGP `peer_device` resolution (peer IP → hostname). Left as `None` in v1, and `bgp.csv`
+  reports it empty on every row. The `bgp` **view** does match a peer address against the
+  interface addresses the model already holds, so that one session between two captured
+  routers is drawn as one link rather than four disconnected boxes — that is a property of
+  the drawing, not of the model, and it writes nothing back (see §7).
 - Native Lucidchart API integration. v1 targets draw.io files that Lucid imports.
 - Any telemetry or network egress. The tool must make **zero** network connections (see §11).
 
@@ -494,7 +498,11 @@ render-ready nodes/links. Views never parse text and never write files.
   renders one representative VLAN (as the STP view does) and the virtual IP is precisely
   what differs between grouped VLANs, the gateway node names the VLAN it was drawn from.
 - **`bgp`** — nodes = devices (labeled with ASN), edges = BGP sessions labeled with state;
-  iBGP vs eBGP styled differently. v1 shows the neighbor/session graph only.
+  iBGP vs eBGP styled differently (blue and purple link colors). v1 shows the
+  neighbor/session graph only: one diagram for the whole network, no VLAN selection, and
+  no view-specific options. A peer whose address matches no captured interface is drawn as
+  its own node, labeled with that address and its ASN and faded like any other device the
+  captures do not cover.
 
 ---
 

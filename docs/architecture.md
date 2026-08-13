@@ -7,7 +7,7 @@ rule in [`CLAUDE.md`](../CLAUDE.md). For scope, the full data model, and the CLI
 reference, see [`PROJECT_SPEC.md`](../PROJECT_SPEC.md); for user-facing command/option
 docs, see the [README](../README.md#usage).
 
-## Current state (Phase 5)
+## Current state (Phase 6)
 
 | Command | Status | Reads | Writes |
 |---|---|---|---|
@@ -15,11 +15,11 @@ docs, see the [README](../README.md#usage).
 | `nettopo l2` | real | CDP/LLDP, interfaces | `output/l2/*.drawio` |
 | `nettopo stp` | real | `show spanning-tree` | `output/stp/*.drawio`, `stp.csv` rows |
 | `nettopo hsrp` | real | `show standby brief` | `output/hsrp/*.drawio`, `hsrp.csv` rows |
-| `nettopo bgp` | argument parsing only | — | exits 1, "not implemented yet" |
+| `nettopo bgp` | real | `show ip bgp summary` | `output/bgp/bgp.drawio`, `bgp.csv` rows |
 | `nettopo all` | argument parsing only | — | exits 1, "not implemented yet" |
 
-`bgp`/`all` land in Phases 6–7 (`PROJECT_SPEC.md` §14). The rest of this document
-describes both what exists today and the target architecture those phases build into.
+`all` lands in Phase 7 (`PROJECT_SPEC.md` §14). The rest of this document
+describes both what exists today and the target architecture that phase builds into.
 
 ## System overview
 
@@ -50,7 +50,7 @@ flowchart LR
 | `ingest/` | Data sources. `base.py` defines the `DataSource` interface; `files.py` implements it over a directory of saved captures; `model_builder.py` wires parser output into a populated `NetworkModel`. |
 | `parsing/` | One parser per `show` command. Returns plain dataclasses/lists — never touches `NetworkModel` directly. |
 | `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP/HSRP fingerprint functions that decide which VLANs render identically. `platforms.py`: the product-family table that turns a reported chassis into a `DeviceRole`. |
-| `views/` | One module per diagram (`l2`, `stp`, `hsrp`; `bgp` pending). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
+| `views/` | One module per diagram (`l2`, `stp`, `hsrp`, `bgp`). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
 | `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key), `lucidify.py` (Lucidchart-import post-process). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
 | `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
@@ -291,7 +291,7 @@ command matches a pattern and returns just that command's output slice.
 | `show etherchannel summary`, `show port-channel summary` | `parsing/etherchannel.py` | ntc-templates (see below) | `Interface.po_id`, `Interface.po_members` |
 | `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) — and, when links are bundled, needs `show etherchannel summary` alongside it for the STP view to resolve `Po1` onto its members |
 | `show standby brief` | `parsing/hsrp.py` | ntc-templates | `NetworkModel.hsrp` (`HsrpGroup`, `HsrpMember`) |
-| `show ip bgp summary` | `parsing/bgp.py` | not yet implemented | — (Phase 6) |
+| `show ip bgp summary` | `parsing/bgp.py` | ntc-templates | `NetworkModel.bgp` (`BgpPeer`) and `Device.asn` — the summary's only writer |
 
 All ntc-templates-backed parsers go through `parsing/_textfsm.py`, a thin typed wrapper
 around `ntc_templates.parse_output` — the one place the untyped `ntc_templates` import
@@ -443,7 +443,7 @@ parsed captures in `tests/test_views_stp.py` and `tests/fixtures/stp_topology/`.
 | L2 | `views/l2.py` | `model.devices`, `model.links` | `--endpoints all\|network-only`, `--link-mode physical\|port-channel` | one `Diagram` |
 | STP | `views/stp.py` | `model.stp`, `model.links`, `model.devices` | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per topology group |
 | HSRP | `views/hsrp.py` | `model.hsrp`, `model.devices` (for each member's SVI address) | `--vlan`, `--group-mode` | one `Diagram` per VLAN or per matching group |
-| BGP | `views/bgp.py` | — | — | not yet implemented (Phase 6) |
+| BGP | `views/bgp.py` | `model.bgp`, `model.devices` (for AS numbers and peer-address matching) | — | one `Diagram` for the whole network |
 
 ### Why the STP view cross-references `model.links`
 
@@ -498,6 +498,45 @@ one extra obligation. The virtual IP and the SVI name are precisely the two thin
 the headline fact of the whole diagram. So the gateway node names the VLAN it was drawn
 from (`VLAN 10 group 10` above `10.10.10.1`): a diagram that says which VLAN its address
 belongs to cannot be misread as claiming that address for every VLAN in the filename.
+
+### Why the BGP view matches peer addresses, and why the model still does not
+
+`show ip bgp summary` names the far end of a session by IP and nothing else, and
+`BgpPeer.peer_device` is specified to stay `None` in v1 (`PROJECT_SPEC.md` §2). Drawn
+literally, that specification produces a diagram nobody wants: two captured routers
+peering with each other become four nodes — each router, plus a nameless box standing for
+the other — and the one fact a session graph exists to show, who peers with whom, is the
+fact it loses.
+
+So `views/bgp.py` builds a `{interface address: hostname}` index over `model.devices` and
+resolves each `peer_ip` through it. A peer that matches a captured device becomes that
+device's node, and the two routers' independent reports of the same session collapse into
+one link; a peer that matches nothing keeps a namespaced node of its own
+(`bgp:peer:198.51.100.1`, the same colon convention the HSRP view uses for its virtual
+gateways), drawn `inferred` because that flag already means exactly "known only through
+someone else's report".
+
+The distinction that keeps this consistent with the spec is *where* the match lives. It is
+a property of the drawing, computed in the view from data the model already holds; it never
+writes `peer_device`, and `bgp.csv` still reports one row per session as each device
+reported it, `peer_device` empty. Resolving it in the model would be a claim about the
+network — this is a claim about the picture. `export/csv_export.py`'s `_write_bgp` and
+`views/bgp.py` therefore disagree about how many sessions there are (eight rows, five
+links, in `examples/bgp-edge/`), which is correct: the CSV is the record, the diagram is
+the reading.
+
+**Dedupe and ordering.** A session is keyed on its VRF and its two endpoint ids in a fixed
+order — captured devices before unresolved peers, then by name — so both ends of a
+device-to-device session compute the same key whichever router reported it. When the two
+ends disagree about the state (one still `Active` while the other has moved on), both are
+shown rather than one being silently picked: that disagreement is precisely what someone
+opens the diagram to find.
+
+**One diagram, no `--vlan`.** BGP sessions do not partition into VLANs the way STP and
+HSRP do, so there is nothing for a VLAN selector to select between and the `bgp`
+subparser takes only the common arguments. The output filename is correspondingly fixed
+at `output/bgp/bgp.drawio`, and `cli.py` drives the view through its own small handler
+rather than the `_VlanDiagramView` machinery the other two share.
 
 ### Why grouped STP diagrams render one representative VLAN
 
@@ -710,8 +749,8 @@ and writes local output files. `tests/test_no_network.py` enforces this by
 monkeypatching `socket.socket` to fail and asserting a full run still succeeds; Phase 3
 extends the base `parse`-only test to cover `nettopo l2` now that it pulls in
 N2G/igraph, Phase 4 extends it again to cover `nettopo stp`, Phase 5 again for
-`nettopo hsrp`, and it will extend further to cover `nettopo all` once Phase 7 adds that
-command.
+`nettopo hsrp`, Phase 6 again for `nettopo bgp`, and it will extend further to cover
+`nettopo all` once Phase 7 adds that command.
 
 `utils/paths.py`'s `resolve_output_root()` is used by every command to resolve `-o`/
 `--output` to an absolute path before anything is written. Its `sanitize_filename_component()`

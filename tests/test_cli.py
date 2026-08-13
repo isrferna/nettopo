@@ -11,11 +11,12 @@ import pytest
 from nettopo.cli import build_parser, main
 
 ALL_COMMANDS = {"parse", "l2", "stp", "hsrp", "bgp", "all"}
-UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp", "hsrp"}
+UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp", "hsrp", "bgp"}
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
 STP_TOPOLOGY = Path(__file__).parent / "fixtures" / "stp_topology"
 HSRP_TOPOLOGY = Path(__file__).parent / "fixtures" / "hsrp_topology"
+BGP_TOPOLOGY = Path(__file__).parent / "fixtures" / "bgp_topology"
 PORT_CHANNEL = Path(__file__).parent / "fixtures" / "captures_portchannel"
 STP_PORT_CHANNEL = Path(__file__).parent / "fixtures" / "stp_portchannel"
 
@@ -251,4 +252,27 @@ def test_hsrp_command_draws_both_groups_of_a_load_shared_vlan(tmp_path: Path) ->
 
 def test_hsrp_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
     exit_code = main(["hsrp", "-i", str(tmp_path / "does-not-exist"), "--all"])
+    assert exit_code == 1
+
+
+def test_bgp_command_writes_one_diagram_for_the_whole_network(tmp_path: Path) -> None:
+    output_dir = tmp_path / "output"
+    exit_code = main(["bgp", "-i", str(BGP_TOPOLOGY), "-o", str(output_dir)])
+
+    assert exit_code == 0
+    assert {path.name for path in (output_dir / "bgp").iterdir()} == {"bgp.drawio"}
+
+
+def test_bgp_diagram_draws_one_link_per_session_not_per_report(tmp_path: Path) -> None:
+    """The two routers both report their shared iBGP session; it is drawn once."""
+    output_dir = tmp_path / "output"
+    exit_code = main(["bgp", "-i", str(BGP_TOPOLOGY), "-o", str(output_dir)])
+
+    assert exit_code == 0
+    # The iBGP session between the two routers, plus core-r1's two eBGP sessions.
+    assert _link_count(output_dir / "bgp" / "bgp.drawio") == 3
+
+
+def test_bgp_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
+    exit_code = main(["bgp", "-i", str(tmp_path / "does-not-exist")])
     assert exit_code == 1

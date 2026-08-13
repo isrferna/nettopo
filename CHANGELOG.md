@@ -5,6 +5,50 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 6: BGP. `nettopo bgp` becomes the fifth real command, rendering the BGP neighbor
+session graph, and `bgp.csv` stops being header-only. Nothing existing changes shape: the
+L2, STP and HSRP views, their filenames and every other CSV table are untouched.
+
+### Added
+
+- Phase 6 BGP parsing: `parsing/bgp.py` reads `show ip bgp summary` through ntc-templates
+  and populates `NetworkModel.bgp` — one `BgpPeer` per session, carrying both AS numbers,
+  the peer address, the state and whether the session is iBGP or eBGP. Two columns are
+  interpreted rather than copied: IOS overloads the last one, printing a prefix count for
+  a session that is up and a state word (`Idle`, `Active`, `Idle (Admin)`) for one that is
+  not, so a count is recorded as `Established`; and the summary never says iBGP or eBGP,
+  which is read off whether the neighbor's AS matches the local one. AS numbers written in
+  asdot notation (`1.10`) are converted to the single integer the model stores. IOS and
+  IOS-XE print the command identically and share the one template; `tests/fixtures/bgp/`
+  carries a fixture for each.
+- `Device.asn` is populated, from the local AS number in the device's own summary. It had
+  been in the model and in `devices.csv` since Phase 1 with nothing writing it.
+- Phase 6 BGP view: `views/bgp.py` builds one render-ready `Diagram` for the whole
+  network. Routers are labeled with their AS number, sessions with their state, and
+  colored blue for iBGP or purple for eBGP. Because `show ip bgp summary` names the far
+  end of a session by address only, the view matches each peer address against the
+  interface addresses the model already holds: where it finds a captured device, the two
+  routers' independent reports of one session collapse into a single link, and where it
+  finds nothing the peer keeps a faded node of its own labeled with its address and AS.
+  That match is a property of the drawing — it never writes `BgpPeer.peer_device`, which
+  stays `None` as the spec requires. When the two ends disagree about a session's state,
+  both are shown rather than one being silently picked.
+- `nettopo bgp -i <dir>` is real, writing `output/bgp/bgp.drawio`. The filename is fixed
+  and the command takes no view-specific options: BGP sessions do not partition into VLANs
+  the way STP and HSRP do, so there is nothing for a `--vlan`/`--all` pair to select
+  between.
+- `bgp.csv` is populated: one row per session as each device reported it, with
+  `peer_device` empty on every row and `vrf` always `default` — `show ip bgp summary`
+  covers the default VRF, and the template has no VRF column to read one from.
+- `examples/bgp-edge/`: three routers in AS 65001 fully meshed over iBGP, with the edge
+  router holding two eBGP sessions to peers no capture covers — one Established, one that
+  never came up. Deliberately narrow, like `examples/hsrp-quad/`: the captures carry
+  `show version`, `show ip interface brief` and `show ip bgp summary` and nothing else.
+  The generated diagram is committed under `examples/bgp-edge/diagrams/bgp/`, the README
+  embeds it, and `tests/test_examples_bgp_edge.py` pins it.
+
 ## [0.5.0] - 2026-08-11
 
 Phase 5: HSRP. `nettopo hsrp` becomes the fourth real command, rendering per-VLAN

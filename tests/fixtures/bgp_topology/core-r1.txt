@@ -1,0 +1,27 @@
+core-r1#show version
+Cisco IOS XE Software, Version 17.06.05
+Cisco IOS Software [Bengaluru], ISR Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.6.5, RELEASE SOFTWARE (fc2)
+Copyright (c) 1986-2022 by Cisco Systems, Inc.
+
+core-r1 uptime is 6 weeks, 2 days, 3 hours, 8 minutes
+System image file is "bootflash:packages.conf"
+
+cisco ISR4431/K9 (1RU) processor with 1795979K/6147K bytes of memory.
+Processor board ID FDO24160XYZ
+4 Gigabit Ethernet interfaces
+Configuration register is 0x2102
+
+core-r1#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+GigabitEthernet0/0/0   10.0.12.1       YES NVRAM  up                    up
+GigabitEthernet0/0/1   198.51.100.2    YES NVRAM  up                    up
+Loopback0              10.255.0.1      YES NVRAM  up                    up
+
+core-r1#show ip bgp summary
+BGP router identifier 10.255.0.1, local AS number 65001
+BGP table version is 42, main routing table version 42
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.0.12.2       4        65001    1204    1208       42    0    0 4d11h           9
+198.51.100.1    4        65100     880     884       42    0    0 1w2d            4
+203.0.113.9     4        65200       0       0        0    0    0 never    Idle

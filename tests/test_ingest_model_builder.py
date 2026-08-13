@@ -30,6 +30,7 @@ NXOS_FIXTURES = Path(__file__).parent / "fixtures" / "captures_nxos"
 PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "captures_portchannel"
 STP_PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "stp_portchannel"
 HSRP_FIXTURES = Path(__file__).parent / "fixtures" / "hsrp_topology"
+BGP_FIXTURES = Path(__file__).parent / "fixtures" / "bgp_topology"
 
 
 def _build_model() -> NetworkModel:
@@ -285,3 +286,20 @@ def test_several_hsrp_groups_on_one_svi_stay_separate() -> None:
     model = build_network_model(FileDataSource(HSRP_FIXTURES))
     assert [key for key in sorted(model.hsrp) if key[0] == 40] == [(40, 40), (40, 41)]
     assert model.hsrp[(40, 41)].virtual_ip == "10.0.40.254"
+
+
+def test_every_bgp_session_is_collected_as_each_device_reported_it() -> None:
+    """`model.bgp` is a flat list: a session needs no merging, unlike an HSRP group."""
+    model = build_network_model(FileDataSource(BGP_FIXTURES))
+    assert [(peer.local_device, peer.peer_ip) for peer in model.bgp] == [
+        ("core-r1", "10.0.12.2"),
+        ("core-r1", "198.51.100.1"),
+        ("core-r1", "203.0.113.9"),
+        ("core-r2", "10.0.12.1"),
+    ]
+
+
+def test_a_bgp_summary_settles_the_devices_own_as_number() -> None:
+    model = build_network_model(FileDataSource(BGP_FIXTURES))
+    assert model.devices["core-r1"].asn == 65001
+    assert model.devices["core-r2"].asn == 65001

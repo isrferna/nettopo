@@ -1,0 +1,36 @@
+core-r2#show version
+Cisco IOS XE Software, Version 17.06.05
+Cisco IOS Software [Bengaluru], ISR Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.6.5, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2022 by Cisco Systems, Inc.
+Compiled Thu 18-Aug-22 11:24 by mcpre
+
+ROM: IOS-XE ROMMON
+
+core-r2 uptime is 9 weeks, 4 days, 2 hours, 9 minutes
+System returned to ROM by Reload Command
+System image file is "bootflash:packages.conf"
+
+cisco ISR4451/K9 (2RU) processor with 1795979K/6147K bytes of memory.
+Processor board ID FDO24170AA2
+4 Gigabit Ethernet interfaces
+32768K bytes of non-volatile configuration memory.
+Configuration register is 0x2102
+
+core-r2#show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+GigabitEthernet0/0/0   10.0.0.6        YES NVRAM  up                    up
+GigabitEthernet0/0/1   10.0.0.13       YES NVRAM  up                    up
+Loopback0              10.255.0.2      YES NVRAM  up                    up
+
+core-r2#show ip bgp summary
+BGP router identifier 10.255.0.2, local AS number 65001
+BGP table version is 214, main routing table version 214
+36 network entries using 8928 bytes of memory
+41 path entries using 5576 bytes of memory
+BGP using 14504 total bytes of memory
+BGP activity 72/36 prefixes, 88/47 paths, scan interval 60 secs
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65001   11208   11204      214    0    0 6w1d           36
+10.255.0.3      4        65001   11186   11192      214    0    0 6w1d           36

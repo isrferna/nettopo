@@ -1,8 +1,7 @@
 """CSV export of every intermediate table (PROJECT_SPEC.md section 8).
 
 CSV is a first-class output, not an afterthought: it is both a deliverable and the
-primary debugging aid for a wrong diagram. One table per model entity. `bgp.csv` is
-header-only until its parser lands in Phase 6.
+primary debugging aid for a wrong diagram. One table per model entity.
 """
 
 from __future__ import annotations
@@ -58,7 +57,7 @@ def write_csv_tables(model: NetworkModel, output_root: Path) -> Path:
     _write_vlans(csv_dir / "vlans.csv", model)
     _write_stp(csv_dir / "stp.csv", model)
     _write_hsrp(csv_dir / "hsrp.csv", model)
-    _write_table(csv_dir / "bgp.csv", _BGP_HEADER, [])
+    _write_bgp(csv_dir / "bgp.csv", model)
 
     return csv_dir
 
@@ -213,6 +212,30 @@ def _write_hsrp(path: Path, model: NetworkModel) -> None:
                 )
             )
     _write_table(path, _HSRP_HEADER, rows)
+
+
+def _write_bgp(path: Path, model: NetworkModel) -> None:
+    """One row per session, exactly as the device reported it.
+
+    `peer_device` is always empty: v1 does not resolve a peer IP to a hostname
+    (PROJECT_SPEC.md section 2). The BGP *view* matches addresses so it can draw one link
+    between two captured routers, but that is a drawing decision and deliberately does not
+    leak into this table, which stays a faithful record of what was parsed.
+    """
+    rows: list[tuple[object, ...]] = [
+        (
+            peer.local_device,
+            peer.local_asn,
+            peer.peer_ip,
+            peer.peer_asn,
+            peer.peer_device,
+            peer.type.value,
+            peer.state,
+            peer.vrf,
+        )
+        for peer in sorted(model.bgp, key=lambda peer: (peer.local_device, peer.vrf, peer.peer_ip))
+    ]
+    _write_table(path, _BGP_HEADER, rows)
 
 
 def _write_table(path: Path, header: tuple[str, ...], rows: Sequence[tuple[object, ...]]) -> None:

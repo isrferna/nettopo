@@ -23,6 +23,7 @@ from nettopo.model.entities import NetworkModel
 from nettopo.model.grouping import GroupMode
 from nettopo.render.drawio import render_diagram
 from nettopo.utils.paths import resolve_output_root
+from nettopo.views import bgp as bgp_view
 from nettopo.views import hsrp as hsrp_view
 from nettopo.views import l2 as l2_view
 from nettopo.views import stp as stp_view
@@ -33,6 +34,10 @@ _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 _L2_OUTPUT_STEMS = {"all": "l2_full", "network-only": "l2_network-only"}
 _L2_PORT_CHANNEL_SUFFIX = "_port-channels"
+
+# BGP renders one diagram for the whole network and takes no view-specific options, so
+# unlike the L2 and per-VLAN views its filename is fixed (PROJECT_SPEC.md section 8).
+_BGP_OUTPUT_FILENAME = "bgp.drawio"
 
 logger = logging.getLogger("nettopo")
 
@@ -312,6 +317,34 @@ def _run_hsrp(args: argparse.Namespace) -> int:
     return _run_vlan_view(args, _HSRP_VIEW)
 
 
+def _run_bgp(args: argparse.Namespace) -> int:
+    """Ingest captures, populate the model, and render the BGP session graph."""
+    try:
+        source = FileDataSource(args.input)
+        model = build_network_model(source, default_platform=args.platform)
+    except OSError as exc:
+        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        return 1
+
+    diagram = bgp_view.build(model)
+
+    try:
+        output_root = resolve_output_root(args.output)
+        output_path = output_root / "bgp" / _BGP_OUTPUT_FILENAME
+        render_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify)
+    except OSError as exc:
+        logger.error("Failed to write output to '%s': %s", args.output, exc)
+        return 1
+
+    logger.info(
+        "Rendered BGP diagram (%d node(s), %d session(s)) to %s",
+        len(diagram.nodes),
+        len(diagram.links),
+        output_path,
+    )
+    return 0
+
+
 def _run_unimplemented(args: argparse.Namespace) -> int:
     """Placeholder handler: no view/render logic exists yet (Phase 5+)."""
     logger.error("'%s' is not implemented yet.", args.command)
@@ -323,7 +356,7 @@ _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "l2": _run_l2,
     "stp": _run_stp,
     "hsrp": _run_hsrp,
-    "bgp": _run_unimplemented,
+    "bgp": _run_bgp,
     "all": _run_unimplemented,
 }
 
