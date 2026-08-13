@@ -113,7 +113,7 @@ nettopo/
 │       ├── model/             # the normalized data model + grouping logic
 │       │   ├── __init__.py
 │       │   ├── entities.py    # dataclasses + enums
-│       │   ├── grouping.py    # fingerprint functions and group-mode logic
+│       │   ├── grouping.py    # STP fingerprint function and group-mode logic
 │       │   └── platforms.py   # platform string -> DeviceRole
 │       ├── views/             # one module per diagram view; consumes the model
 │       │   ├── __init__.py
@@ -429,27 +429,30 @@ a subinterface has no key to live under: `parsing/hsrp.py` skips it with a warni
 a deliberate v1 limit matching the HSRP view's scope (§7, "switches and their SVIs"), not a
 parsing gap.
 
-### Grouping (STP and HSRP) — `model/grouping.py`
+### Grouping (STP) — `model/grouping.py`
 
 Three generation modes, exposed on the CLI as `--group-mode`:
 
 | Mode | Meaning | Fingerprint contents |
 |------|---------|----------------------|
 | `per-vlan` (default) | One diagram per VLAN. No grouping. | n/a |
-| `strict` | Group VLANs whose diagrams would be **identical**, including configured priorities. | STP: root + sorted `(device, base_priority)` + sorted `(device, interface, role, state)`. HSRP: sorted `(device, role, priority)`. |
-| `topology` (aggressive) | Group VLANs with the **same topology**, ignoring priority values. | STP: root + sorted `(device, interface, role, state)`. HSRP: sorted `(device, role)`. |
+| `strict` | Group VLANs whose diagrams would be **identical**, including configured priorities. | Root + sorted `(device, base_priority)` + sorted `(device, interface, role, state)`. |
+| `topology` (aggressive) | Group VLANs with the **same topology**, ignoring priority values. | Root + sorted `(device, interface, role, state)`. |
 
 **Design principle:** grouping is by **resulting topology fingerprint**, never by raw
 configured priority alone. Equal priority does not guarantee equal topology (differing
 port costs or states can change the blocked link), and `strict` vs `topology` differ only
-in whether the priority values participate in the fingerprint. Both fingerprint functions
-live in `grouping.py` and are the most test-critical logic in the project (see §9).
+in whether the priority values participate in the fingerprint. The fingerprint function
+lives in `grouping.py` and is the most test-critical logic in the project (see §9).
 
-The fingerprint is per `StpVlan` for STP and per `HsrpGroup` for HSRP, but the unit being
-grouped is the **VLAN** in both cases, because that is what a diagram covers. One SVI can
-carry several HSRP groups (two gateways load-sharing a VLAN), so `views/hsrp.py` compares
-VLANs by their groups' fingerprints in group-number order — two VLANs group together only
-when their entire first-hop setup matches, group for group.
+The fingerprint is per `StpVlan`, but the unit being grouped is the **VLAN**, because that
+is what a diagram covers.
+
+**Grouping is STP-only.** The HSRP view takes `--vlan`/`--all` and nothing else: grouping
+means several VLANs render identically, and two VLANs' HSRP never does — each carries its
+own virtual IP and its own SVI address on every router, and the virtual IP is the headline
+fact of the diagram. A grouped picture could only drop every VLAN's addresses but one, or
+crowd several sets of addresses onto the same nodes. `hsrp.csv` is the lossless view.
 
 Group output naming: `stp_vlan10.drawio` (per-vlan), and for grouped modes a stable,
 sorted, filesystem-safe name such as `stp_vlans-10_20_30.drawio`.
@@ -486,7 +489,7 @@ render-ready nodes/links. Views never parse text and never write files.
   LLDP chassis address matches the reported root address exactly; otherwise the run warns
   and nothing is highlighted, so the diagram never guesses at a root.
 - **`hsrp`** — switches and their SVIs; per group show virtual IP, each member's priority
-  and role (active/standby/listen). Honors `--group-mode` and `--vlan`.
+  and role (active/standby/listen). Honors `--vlan`; there is no `--group-mode` (see §6).
   HSRP is not a topology: `show standby brief` says who shares a virtual IP, never which
   cable joins them, so unlike the STP view this one does not read `model.links` at all.
   Each group is drawn as a **virtual gateway node** — the address hosts point at — with
@@ -604,7 +607,7 @@ it orchestrates ingest → parse → model → view → render/export and contai
 nettopo parse   -i ./captures                      # parse only; write all CSV tables
 nettopo l2      -i ./captures [--endpoints all|network-only] [--link-mode physical|port-channel]
 nettopo stp     -i ./captures [--vlan N | --group-mode per-vlan|strict|topology] [--all]
-nettopo hsrp    -i ./captures [--vlan N | --group-mode per-vlan|strict|topology] [--all]
+nettopo hsrp    -i ./captures [--vlan N] [--all]
 nettopo bgp     -i ./captures
 nettopo all     -i ./captures                      # every view + every CSV
 ```
@@ -612,7 +615,7 @@ nettopo all     -i ./captures                      # every view + every CSV
 - `--link-mode` default is `physical`; `port-channel` writes a `_port-channels`-suffixed
   filename so both link modes can coexist in one output directory.
 - `--vlan N` restricts to one VLAN (single diagram); mutually exclusive with `--group-mode`.
-- `--group-mode` default is `per-vlan`.
+- `--group-mode` is `stp`-only and defaults to `per-vlan`; `hsrp` rejects it (see §6).
 - `--all` for `stp`/`hsrp` writes every resulting diagram into `output/<view>/`.
 
 ---

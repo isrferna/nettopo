@@ -16,16 +16,15 @@ Four diagram views are produced from the same parsed data model:
 ## Status
 
 **Phase 6 — BGP.** `nettopo bgp -i <dir>` now renders the BGP session graph: one diagram
-for the whole network, with each router labeled by its AS number, each session labeled
-with its state and colored blue for iBGP or purple for eBGP, and any peer no capture
-covers drawn faded and labeled by the address and AS the session named it by. It takes no
-view-specific options, and `bgp.csv` is now populated. `nettopo hsrp -i <dir>` (Phase 5)
-renders per-VLAN first-hop-redundancy diagrams: each HSRP group is drawn as a virtual
-gateway carrying its virtual IP, with a link to every router that offers it labeled with
-that router's SVI, role and priority — green for active, amber for standby — and the
-active router highlighted. It takes the same `--vlan N` /
-`--group-mode per-vlan|strict|topology` / `--all` options as
-`stp`. `nettopo stp -i <dir>` (Phase 4) renders per-VLAN
+for the whole network, with each captured router labeled by its AS number and BGP router
+ID, each session labeled with its state and colored blue for iBGP or purple for eBGP, and
+any peer no capture covers drawn faded and labeled by the address and AS the session named
+it by. It takes no view-specific options, and `bgp.csv` is now populated.
+`nettopo hsrp -i <dir>` (Phase 5) renders per-VLAN first-hop-redundancy diagrams: each
+HSRP group is drawn as a virtual gateway carrying its virtual IP, with a link to every
+router that offers it labeled with that router's SVI, role and priority — green for
+active, amber for standby — and the active router highlighted. It takes `--vlan N` or
+`--all` and writes one diagram per VLAN. `nettopo stp -i <dir>` (Phase 4) renders per-VLAN
 spanning-tree diagrams: the root bridge is highlighted, links are colored by forwarding vs
 blocking port state and labeled with role/state at each end. `nettopo l2 -i <dir>`
 (Phase 3) renders devices styled with Cisco icons (`render/icons.py`) by inferred
@@ -190,15 +189,12 @@ link](examples/campus/diagrams/hsrp/hsrp_vlan10.png)
 
 Source: [`hsrp/hsrp_vlan10.drawio`](examples/campus/diagrams/hsrp/hsrp_vlan10.drawio).
 
-`--group-mode` works the same way it does for `stp`, over the HSRP roles and priorities
-instead of the spanning tree. VLANs 10 and 20 have the same active/standby split but were
-configured with different priorities, so:
-
-| Command | Files written into `output/hsrp/` |
-|---|---|
-| `nettopo hsrp -i examples/campus --all` | `hsrp_vlan10`, `hsrp_vlan20`, `hsrp_vlan30` |
-| `nettopo hsrp -i examples/campus --all --group-mode strict` | unchanged — 10 and 20 differ on priority |
-| `nettopo hsrp -i examples/campus --all --group-mode topology` | `hsrp_vlans-10_20`, `hsrp_vlan30` — priorities ignored, so 10 and 20 collapse |
+There is no `--group-mode` here, unlike `stp`: `nettopo hsrp -i examples/campus --all`
+writes `hsrp_vlan10`, `hsrp_vlan20` and `hsrp_vlan30`, always one per VLAN. VLANs 10 and
+20 have the same active/standby split, so the STP view would happily group them — but
+their gateways are `10.10.10.1` and `10.10.20.1`, and every router holds a different SVI
+address in each. There is no picture that covers both without either hiding one VLAN's
+addresses or printing two of everything.
 
 ### A group with four members — active, standby, and two listening
 
@@ -436,25 +432,24 @@ group has no VLAN to be keyed by.
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
-| `--vlan` | VLAN id, e.g. `10` | *(none)* | Restrict to a single VLAN's diagram. Mutually exclusive with `--group-mode`. |
-| `--group-mode` | `per-vlan`, `strict`, `topology` | `per-vlan` | How to group VLANs that would render identically. `per-vlan`: one diagram per VLAN, no grouping. `strict`: group VLANs whose members, roles *and* priorities all match. `topology`: group VLANs whose members and roles match, ignoring configured priorities. Mutually exclusive with `--vlan`. |
-| `--all` | flag | off | Write every resulting diagram (one per VLAN, or one per group under `--group-mode`) into `output/hsrp/`. |
+| `--vlan` | VLAN id, e.g. `10` | *(none)* | Restrict to a single VLAN's diagram. |
+| `--all` | flag | off | Write one diagram per VLAN into `output/hsrp/`. |
 
 As with `stp`, either `--vlan` or `--all` is required.
 
 ```bash
 nettopo hsrp -i ./captures --vlan 10                        # one diagram, VLAN 10 only
 nettopo hsrp -i ./captures --all                            # one diagram per VLAN
-nettopo hsrp -i ./captures --all --group-mode topology      # grouped, priorities ignored
 ```
 
-Filenames follow the same rule as `stp`: `output/hsrp/hsrp_vlan10.drawio` for a single
-VLAN, `output/hsrp/hsrp_vlans-10_20_30.drawio` for a group.
+Filenames are `output/hsrp/hsrp_vlan10.drawio`, one per VLAN.
 
-A grouped diagram is rendered from the lowest VLAN in its group, and the virtual IP is
-exactly what differs between the VLANs it covers — so the gateway node names the VLAN its
-address belongs to (`VLAN 10 group 10`) rather than leaving the reader to assume the
-address applies to all of them. `hsrp.csv` has the per-VLAN detail.
+Unlike `stp`, this view has no `--group-mode`, and passing one is an error. Grouping means
+several VLANs render identically, and two VLANs' HSRP never does: each has its own virtual
+IP and its own SVI address on every router, and the virtual IP is the headline fact of the
+diagram. A grouped picture would have to drop every VLAN's addresses but one, or stack
+three sets of addresses onto the same two boxes. `hsrp.csv` lists every VLAN's detail side
+by side when that is what you need.
 
 ### `nettopo bgp`
 

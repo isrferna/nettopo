@@ -67,15 +67,25 @@ def _add_common_arguments(subparser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_group_mode_arguments(subparser: argparse.ArgumentParser) -> None:
-    group = subparser.add_mutually_exclusive_group()
-    group.add_argument("--vlan", type=int, help="Restrict output to a single VLAN.")
-    group.add_argument(
-        "--group-mode",
-        choices=("per-vlan", "strict", "topology"),
-        default="per-vlan",
-        help="How to group VLAN diagrams (default: %(default)s).",
-    )
+def _add_vlan_selection_arguments(
+    subparser: argparse.ArgumentParser, *, with_group_mode: bool
+) -> None:
+    """Add the VLAN selection options a per-VLAN view takes.
+
+    `--group-mode` belongs to `stp` alone, so it is opt-in: the HSRP view draws one
+    diagram per VLAN and has nothing to group (see `views/hsrp.py`). Where it does apply
+    it joins `--vlan` in the mutually exclusive group -- naming one VLAN and asking how to
+    group VLANs are contradictory requests.
+    """
+    selection = subparser.add_mutually_exclusive_group()
+    selection.add_argument("--vlan", type=int, help="Restrict output to a single VLAN.")
+    if with_group_mode:
+        selection.add_argument(
+            "--group-mode",
+            choices=("per-vlan", "strict", "topology"),
+            default="per-vlan",
+            help="How to group VLAN diagrams (default: %(default)s).",
+        )
     subparser.add_argument(
         "--all",
         action="store_true",
@@ -134,11 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     stp_parser = subparsers.add_parser("stp", help="Generate per-VLAN spanning-tree diagrams.")
     _add_common_arguments(stp_parser)
-    _add_group_mode_arguments(stp_parser)
+    _add_vlan_selection_arguments(stp_parser, with_group_mode=True)
 
     hsrp_parser = subparsers.add_parser("hsrp", help="Generate per-VLAN HSRP diagrams.")
     _add_common_arguments(hsrp_parser)
-    _add_group_mode_arguments(hsrp_parser)
+    _add_vlan_selection_arguments(hsrp_parser, with_group_mode=False)
 
     bgp_parser = subparsers.add_parser("bgp", help="Generate the BGP session graph.")
     _add_common_arguments(bgp_parser)
@@ -205,20 +215,23 @@ def _l2_output_filename(endpoints: str, link_mode: LinkMode) -> str:
 
 
 class _BuildVlanGroups(Protocol):
-    """The `build_groups` both per-VLAN views expose (`views/stp.py`, `views/hsrp.py`)."""
+    """How this module asks a per-VLAN view for its diagrams.
 
-    def __call__(
-        self, model: NetworkModel, *, group_mode: GroupMode, vlan: int | None
-    ) -> list[VlanDiagramGroup]: ...
+    The views' own `build_groups` signatures differ -- only `views/stp.py` takes a
+    `group_mode` -- so each view reads its options off `args` in a small adapter below,
+    and `_run_vlan_view` stays free of per-view option handling.
+    """
+
+    def __call__(self, model: NetworkModel, args: argparse.Namespace) -> list[VlanDiagramGroup]: ...
 
 
 @dataclass(frozen=True)
 class _VlanDiagramView:
     """One of the two per-VLAN views (`stp`, `hsrp`), as this module needs to drive it.
 
-    Both take the same `--vlan`/`--group-mode`/`--all` options and both return a
-    `VlanDiagramGroup` per diagram, so they share one handler; only the names, the two
-    functions, and any view-specific sanity check differ.
+    Both select VLANs with `--vlan`/`--all` and both return a `VlanDiagramGroup` per
+    diagram, so they share one handler; only the names, the two functions, and any
+    view-specific sanity check differ.
     """
 
     name: str  # the subcommand, and the `output/<name>/` subdirectory
@@ -241,8 +254,7 @@ def _run_vlan_view(args: argparse.Namespace, view: _VlanDiagramView) -> int:
         logger.error("Failed to read captures from '%s': %s", args.input, exc)
         return 1
 
-    group_mode = GroupMode(args.group_mode)
-    groups = view.build_groups(model, group_mode=group_mode, vlan=args.vlan)
+    groups = view.build_groups(model, args)
 
     try:
         output_root = resolve_output_root(args.output)
@@ -294,17 +306,25 @@ def _vlan_list(group: VlanDiagramGroup) -> str:
     return ", ".join(str(vlan_id) for vlan_id in group.vlan_ids)
 
 
+def _build_stp_groups(model: NetworkModel, args: argparse.Namespace) -> list[VlanDiagramGroup]:
+    return stp_view.build_groups(model, group_mode=GroupMode(args.group_mode), vlan=args.vlan)
+
+
+def _build_hsrp_groups(model: NetworkModel, args: argparse.Namespace) -> list[VlanDiagramGroup]:
+    return hsrp_view.build_groups(model, vlan=args.vlan)
+
+
 _STP_VIEW = _VlanDiagramView(
     name="stp",
     label="STP",
-    build_groups=stp_view.build_groups,
+    build_groups=_build_stp_groups,
     output_filename=stp_view.stp_output_filename,
     warn_about=_warn_about_stp_islands,
 )
 _HSRP_VIEW = _VlanDiagramView(
     name="hsrp",
     label="HSRP",
-    build_groups=hsrp_view.build_groups,
+    build_groups=_build_hsrp_groups,
     output_filename=hsrp_view.hsrp_output_filename,
 )
 

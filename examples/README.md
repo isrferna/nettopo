@@ -24,15 +24,14 @@ A six-switch campus, ten devices once the neighbor-only ones are counted:
 Four VLANs (10 users, 20 voice, 30 servers, 99 mgmt) with two distinct spanning trees
 between them, which is what makes `--group-mode strict` and `--group-mode topology`
 produce different groupings on this set. The core pair runs HSRP on VLANs 10, 20 and 30,
-aligned with those trees — each core switch is the active gateway for the VLANs it roots —
-and VLAN 20's priorities are offset from VLAN 10's so the two grouping modes differ for
-HSRP as well.
+aligned with those trees — each core switch is the active gateway for the VLANs it roots.
+The HSRP view never groups, so it writes one diagram per VLAN whatever the priorities are.
 
 ```bash
 nettopo parse -i examples/campus -o ./output
 nettopo l2    -i examples/campus -o ./output
 nettopo stp   -i examples/campus -o ./output --all --group-mode topology
-nettopo hsrp  -i examples/campus -o ./output --all --group-mode topology
+nettopo hsrp  -i examples/campus -o ./output --all
 ```
 
 `campus/diagrams/` holds the output of those commands, committed so the README can show

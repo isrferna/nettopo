@@ -1,4 +1,4 @@
-"""Tests for STP/HSRP grouping fingerprints (PROJECT_SPEC.md sections 6 and 12).
+"""Tests for the STP grouping fingerprint (PROJECT_SPEC.md sections 6 and 12).
 
 The two boundary cases below are the most test-critical logic in the project:
 - Same priority, different topology (the blocked link differs) must NOT group under
@@ -8,17 +8,8 @@ The two boundary cases below are the most test-critical logic in the project:
 
 from __future__ import annotations
 
-from nettopo.model.entities import (
-    HsrpGroup,
-    HsrpMember,
-    HsrpRole,
-    StpBridge,
-    StpPort,
-    StpRole,
-    StpState,
-    StpVlan,
-)
-from nettopo.model.grouping import GroupMode, hsrp_fingerprint, stp_fingerprint
+from nettopo.model.entities import StpBridge, StpPort, StpRole, StpState, StpVlan
+from nettopo.model.grouping import GroupMode, stp_fingerprint
 
 
 def _bridge(device: str, vlan: int, base_priority: int, is_root: bool = False) -> StpBridge:
@@ -124,70 +115,4 @@ def test_per_vlan_mode_never_groups_even_identical_topologies() -> None:
 
     assert stp_fingerprint(vlan10, GroupMode.PER_VLAN) != stp_fingerprint(
         vlan20, GroupMode.PER_VLAN
-    )
-
-
-def _hsrp_member(device: str, role: HsrpRole, priority: int) -> HsrpMember:
-    return HsrpMember(device=device, interface="Vl10", group=1, priority=priority, role=role)
-
-
-def test_hsrp_same_priority_different_role_does_not_group() -> None:
-    group_a = HsrpGroup(
-        vlan=10,
-        group=1,
-        members={
-            "SW1": _hsrp_member("SW1", HsrpRole.ACTIVE, 110),
-            "SW2": _hsrp_member("SW2", HsrpRole.STANDBY, 100),
-        },
-    )
-    group_b = HsrpGroup(
-        vlan=20,
-        group=1,
-        members={
-            "SW1": _hsrp_member("SW1", HsrpRole.STANDBY, 110),
-            "SW2": _hsrp_member("SW2", HsrpRole.ACTIVE, 100),
-        },
-    )
-
-    assert hsrp_fingerprint(group_a, GroupMode.STRICT) != hsrp_fingerprint(
-        group_b, GroupMode.STRICT
-    )
-    assert hsrp_fingerprint(group_a, GroupMode.TOPOLOGY) != hsrp_fingerprint(
-        group_b, GroupMode.TOPOLOGY
-    )
-
-
-def test_hsrp_same_roles_different_priority_groups_under_topology_not_strict() -> None:
-    group_a = HsrpGroup(
-        vlan=10,
-        group=1,
-        members={
-            "SW1": _hsrp_member("SW1", HsrpRole.ACTIVE, 110),
-            "SW2": _hsrp_member("SW2", HsrpRole.STANDBY, 100),
-        },
-    )
-    group_b = HsrpGroup(
-        vlan=20,
-        group=1,
-        members={
-            "SW1": _hsrp_member("SW1", HsrpRole.ACTIVE, 150),
-            "SW2": _hsrp_member("SW2", HsrpRole.STANDBY, 90),
-        },
-    )
-
-    assert hsrp_fingerprint(group_a, GroupMode.TOPOLOGY) == hsrp_fingerprint(
-        group_b, GroupMode.TOPOLOGY
-    )
-    assert hsrp_fingerprint(group_a, GroupMode.STRICT) != hsrp_fingerprint(
-        group_b, GroupMode.STRICT
-    )
-
-
-def test_hsrp_per_vlan_mode_never_groups() -> None:
-    members = {"SW1": _hsrp_member("SW1", HsrpRole.ACTIVE, 110)}
-    group_a = HsrpGroup(vlan=10, group=1, members=members)
-    group_b = HsrpGroup(vlan=20, group=1, members=members)
-
-    assert hsrp_fingerprint(group_a, GroupMode.PER_VLAN) != hsrp_fingerprint(
-        group_b, GroupMode.PER_VLAN
     )

@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 Phase 6: BGP. `nettopo bgp` becomes the fifth real command, rendering the BGP neighbor
-session graph, and `bgp.csv` stops being header-only. Nothing existing changes shape: the
-L2, STP and HSRP views, their filenames and every other CSV table are untouched.
+session graph, and `bgp.csv` stops being header-only. Two things outside BGP change with
+it: `nettopo hsrp` drops `--group-mode`, which it could never honor without dropping
+VLANs, and multi-line node labels finally render as several lines in every view.
 
 ### Added
 
@@ -57,6 +58,19 @@ L2, STP and HSRP views, their filenames and every other CSV table are untouched.
   `show version`, `show ip interface brief` and `show ip bgp summary` and nothing else.
   The generated diagram is committed under `examples/bgp-edge/diagrams/bgp/`, the README
   embeds it, and `tests/test_examples_bgp_edge.py` pins it.
+
+### Removed
+
+- `nettopo hsrp` no longer accepts `--group-mode`; it takes `--vlan N` or `--all` and
+  always writes one diagram per VLAN. Grouping asserts that several VLANs render
+  identically, which HSRP never satisfies: each VLAN has its own virtual IP and its own
+  SVI address on every router. A grouped run rendered the lowest VLAN of each group and
+  silently dropped the rest, so `hsrp_vlans-10_20.drawio` showed VLAN 10's gateway address
+  and none of VLAN 20's. Merging instead of dropping is no better — it stacks a gateway
+  node and an address line per VLAN onto the same two routers. `hsrp.csv` was, and stays,
+  the lossless per-VLAN view. `nettopo stp --group-mode` is unchanged: there the
+  fingerprint really does guarantee identical diagrams.
+- `model/grouping.py`'s `hsrp_fingerprint()`, which had no remaining caller.
 
 ### Fixed
 

@@ -1,5 +1,5 @@
 """Tests for the HSRP view (PROJECT_SPEC.md sections 6, 7): the virtual-gateway star, the
-active router's highlight, role-colored links, and `--group-mode`/`--vlan` selection.
+active router's highlight, role-colored links, and `--vlan` selection.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from nettopo.model.entities import (
     InterfaceType,
     NetworkModel,
 )
-from nettopo.model.grouping import GroupMode
 from nettopo.views import hsrp
 
 _ACTIVE_COLOR = "#2E7D32"
@@ -93,8 +92,8 @@ def test_a_group_is_drawn_as_its_members_around_a_virtual_gateway() -> None:
 
 
 def test_the_gateway_node_names_its_vlan_group_and_virtual_ip() -> None:
-    """Under `--group-mode` the diagram stands for several VLANs, so it says which one
-    the address it shows belongs to."""
+    """One SVI can carry several groups, so the address alone would not say which one
+    the node stands for."""
     (diagram_group,) = hsrp.build_groups(_pair_model(), vlan=10)
     (gateway, *_routers) = diagram_group.diagram.nodes
 
@@ -265,8 +264,8 @@ def test_an_unknown_vlan_yields_no_diagram() -> None:
     assert hsrp.build_groups(_pair_model(), vlan=99) == []
 
 
-def _grouping_model() -> NetworkModel:
-    """VLANs 10 and 20 share roles but not priorities; VLAN 30 swaps the two routers."""
+def _look_alike_model() -> NetworkModel:
+    """VLANs 10 and 20 share members and roles; VLAN 30 swaps the two routers."""
     model = _pair_model()
     model.hsrp.update(
         [
@@ -282,47 +281,18 @@ def _grouping_model() -> NetworkModel:
     return model
 
 
-def test_per_vlan_mode_never_groups() -> None:
-    groups = hsrp.build_groups(_grouping_model(), group_mode=GroupMode.PER_VLAN)
+def test_vlans_that_look_alike_still_get_a_diagram_each() -> None:
+    """VLANs 10 and 20 differ only in their addresses, which is why they are never merged:
+    a single diagram would have to drop one VLAN's virtual IP or crowd in both."""
+    groups = hsrp.build_groups(_look_alike_model())
+
     assert [group.vlan_ids for group in groups] == [(10,), (20,), (30,)]
-
-
-def test_strict_mode_keeps_vlans_whose_priorities_differ_apart() -> None:
-    groups = hsrp.build_groups(_grouping_model(), group_mode=GroupMode.STRICT)
-    assert [group.vlan_ids for group in groups] == [(10,), (20,), (30,)]
-
-
-def test_topology_mode_groups_vlans_whose_roles_match() -> None:
-    groups = hsrp.build_groups(_grouping_model(), group_mode=GroupMode.TOPOLOGY)
-    assert [group.vlan_ids for group in groups] == [(10, 20), (30,)]
-
-
-def test_a_grouped_diagram_is_rendered_from_its_lowest_vlan() -> None:
-    (grouped, _vlan30) = hsrp.build_groups(_grouping_model(), group_mode=GroupMode.TOPOLOGY)
-    (gateway, *_routers) = grouped.diagram.nodes
-
-    assert grouped.vlan_ids == (10, 20)
-    assert gateway.label == "VLAN 10 group 10\n10.0.10.1"
-
-
-def test_a_vlan_with_more_groups_never_joins_one_with_fewer() -> None:
-    """Fingerprints are compared group-for-group, so a second group is a real difference."""
-    model = _grouping_model()
-    model.hsrp.update(
-        [
-            _group(
-                50,
-                10,
-                "10.0.50.1",
-                _member("gw-a", 50, 10, 150, HsrpRole.ACTIVE),
-                _member("gw-b", 50, 10, 100, HsrpRole.STANDBY),
-            ),
-            _group(50, 11, "10.0.50.254", _member("gw-a", 50, 11, 90, HsrpRole.ACTIVE)),
-        ]
-    )
-
-    groups = hsrp.build_groups(model, group_mode=GroupMode.TOPOLOGY)
-    assert [group.vlan_ids for group in groups] == [(10, 20), (30,), (50,)]
+    gateway_labels = [group.diagram.nodes[0].label for group in groups]
+    assert gateway_labels == [
+        "VLAN 10 group 10\n10.0.10.1",
+        "VLAN 20 group 20\n10.0.20.1",
+        "VLAN 30 group 30\n10.0.30.1",
+    ]
 
 
 def test_an_empty_model_yields_no_diagrams() -> None:
@@ -331,7 +301,3 @@ def test_an_empty_model_yields_no_diagrams() -> None:
 
 def test_hsrp_output_filename_for_one_vlan() -> None:
     assert hsrp.hsrp_output_filename((10,)) == "hsrp_vlan10.drawio"
-
-
-def test_hsrp_output_filename_for_a_group_is_joined() -> None:
-    assert hsrp.hsrp_output_filename((10, 20, 30)) == "hsrp_vlans-10_20_30.drawio"
