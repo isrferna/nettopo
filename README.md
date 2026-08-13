@@ -237,13 +237,16 @@ The campus switches run no BGP, so this one comes from
 [`examples/bgp-edge/`](examples/bgp-edge): three routers in AS 65001 — two core, one edge
 — fully meshed over iBGP, with `edge-r1` holding the two eBGP sessions to the outside.
 
-![BGP session graph: core-r1, core-r2 and edge-r1 drawn as routers labeled AS 65001 and
-joined by three blue iBGP links labeled Established, with edge-r1 also joined by purple
-eBGP links to two faded boxes — 198.51.100.1 AS 65100, labeled Established, and
-203.0.113.9 AS 65200, labeled Idle](examples/bgp-edge/diagrams/bgp/bgp.png)
+![BGP session graph: core-r1, core-r2 and edge-r1 drawn as routers labeled AS 65001 over
+their router IDs 10.255.0.1, 10.255.0.2 and 10.255.0.3, joined by three blue iBGP links
+labeled Established, with edge-r1 also joined by purple eBGP links to two faded boxes —
+198.51.100.1 AS 65100, labeled Established, and 203.0.113.9 AS 65200, labeled
+Idle](examples/bgp-edge/diagrams/bgp/bgp.png)
 
 Source: [`bgp/bgp.drawio`](examples/bgp-edge/diagrams/bgp/bgp.drawio).
 
+Each router carries its AS number and its BGP router ID under its name — here the
+loopback each one uses as its identity, which is also what makes the matching below work.
 Each session is drawn once, though the mesh's three sessions are each reported twice —
 once by the router at each end. `show ip bgp summary` names the far end by IP and nothing
 else, so nettopo matches each peer address against the addresses the captures report in
@@ -470,13 +473,17 @@ into VLANs the way STP and HSRP do, so there is nothing for a `--vlan`/`--all` p
 select between; a network large enough to want splitting up wants it by AS or by region,
 which v1 does not model.
 
-Nodes are labeled with the router's name over its AS number, links with the session's
-state (`Established`, `Idle`, `Active`, …) and colored by session type — blue for iBGP,
-purple for eBGP. When both ends of a session were captured and they disagree about its
-state, both are shown (`Established / Active`), in device-name order.
+Nodes are labeled with the router's name over its AS number and its BGP router ID
+(`RID 10.255.0.1`, read from the summary's `BGP router identifier` header line), links
+with the session's state (`Established`, `Idle`, `Active`, …) and colored by session
+type — blue for iBGP, purple for eBGP. When both ends of a session were captured and they
+disagree about its state, both are shown (`Established / Active`), in device-name order.
+A line is left out when its value is unknown, so a device we hold no summary for is
+labeled with its name alone.
 
 A peer whose address matches no captured interface keeps a node of its own, drawn faded
-and labeled with its address and AS number. `peer_device` in `bgp.csv` stays empty
+and labeled with its address and AS number — never a router ID, since the summary prints
+one for the device reporting it and names every far end by address only. `peer_device` in `bgp.csv` stays empty
 regardless: resolving a peer IP to a hostname in the *model* is out of scope for v1
 (see [`PROJECT_SPEC.md` §2](PROJECT_SPEC.md)), so the address matching is a drawing
 decision only and the CSV stays a faithful record of what each device reported.
@@ -539,7 +546,7 @@ What each command contributes, whichever subcommand you run:
 | `show vlan brief` | `vlans.csv` |
 | `show spanning-tree` | `stp.csv` and the STP diagrams: bridge IDs, base and effective priority, per-port role/state |
 | `show standby brief` | `hsrp.csv` and the HSRP diagrams: each group's virtual IP, and each member's SVI, priority, role and preempt flag |
-| `show ip bgp summary` | `bgp.csv` and the BGP diagram: each session's peer address, both AS numbers, its state and whether it is iBGP or eBGP — plus the device's own `asn` in `devices.csv` |
+| `show ip bgp summary` | `bgp.csv` and the BGP diagram: each session's peer address, both AS numbers, its state and whether it is iBGP or eBGP — plus the device's own `asn` and `router_id` in `devices.csv` |
 | `show etherchannel summary` (IOS/IOS-XE) · `show port-channel summary` (NX-OS) | `po_id`/`po_members` in `interfaces.csv`, and the bundles `l2 --link-mode port-channel` collapses links onto |
 
 A capture covering everything implemented today:

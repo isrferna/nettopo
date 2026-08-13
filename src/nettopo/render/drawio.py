@@ -32,6 +32,15 @@ _LABEL_CHARACTER_WIDTH_PX = 6
 # holds more, and the diagram no longer needs to be as sparse to stay readable.
 _LABEL_CLEARANCE = 1.3
 
+# Views write a node label's lines separated by `\n` (`core-sw1\n10.10.10.2`), which is not
+# a line break by the time draw.io reads it: the label is an XML attribute, where any
+# conforming parser normalizes a newline to a space, and it is then rendered as HTML, where
+# a newline is whitespace like any other. An HTML `<br>` survives both -- the same break
+# `views/diagram.py` already uses inside a link tooltip, for the same reason. It is spelled
+# escaped here because N2G formats the label into an XML template before parsing it, so a
+# bare `<br>` would be markup rather than the text the attribute has to carry.
+_LABEL_LINE_BREAK = "&lt;br&gt;"
+
 
 def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool = True) -> None:
     """Render `diagram` to a draw.io file at `output_path`.
@@ -46,7 +55,7 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
         style = node_style(node.role, highlight=node.highlight, inferred=node.inferred)
         drawing.add_node(
             id=node.id,
-            label=node.label,
+            label=node.label.replace("\n", _LABEL_LINE_BREAK),
             style=style.style,
             width=style.width,
             height=style.height,
@@ -94,9 +103,12 @@ def _minimum_node_separation(diagram: Diagram) -> float:
     where the L2 view says "Gi1/0/23", and a spacing that suits the second is unreadable
     for the first. The widest node icon is the floor, for a diagram whose labels are all
     short.
+
+    A multi-line label is measured line by line: what has to fit between two nodes is how
+    wide the label is drawn, and `_LABEL_LINE_BREAK` makes each of its lines its own.
     """
-    longest_label = max(len(text) for text in _label_texts(diagram))
-    return MAX_NODE_WIDTH_PX + _LABEL_CLEARANCE * longest_label * _LABEL_CHARACTER_WIDTH_PX
+    longest_line = max(len(line) for text in _label_texts(diagram) for line in text.split("\n"))
+    return MAX_NODE_WIDTH_PX + _LABEL_CLEARANCE * longest_line * _LABEL_CHARACTER_WIDTH_PX
 
 
 def _label_texts(diagram: Diagram) -> list[str]:

@@ -13,6 +13,14 @@ Two columns need interpreting rather than copying:
 - **Session type.** The summary never says iBGP or eBGP; it is `IBGP` exactly when the
   neighbor's AS equals the local one.
 
+One fact in the output belongs to no session at all: the **router ID** on the header line
+(`BGP router identifier 10.255.0.1, local AS number 65001`), which names the reporting
+router rather than any of its peerings. The template carries it down onto every row, so
+returning it per `BgpPeer` would repeat one device-level fact once per session. Hence
+`BgpCapture`: a session is still a complete `BgpPeer`, needing no merging across devices
+the way an HSRP group does, but it is handed back alongside the one thing the summary says
+about the router itself.
+
 `BgpPeer.peer_device` stays `None` (PROJECT_SPEC.md section 2): resolving a peer IP to a
 hostname is out of scope for v1's model. `vrf` stays `"default"` for the same kind of
 reason -- `show ip bgp summary` covers the default VRF, and the template has no VRF column
@@ -23,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from ntc_templates.parse import ParsingException
@@ -43,22 +52,41 @@ _ASDOT_MULTIPLIER = 65536
 _ESTABLISHED = "Established"
 
 
-def parse_bgp(local_device: str, raw_text: str, *, platform: str = "cisco_ios") -> list[BgpPeer]:
-    """Parse `local_device`'s `show ip bgp summary` output into one `BgpPeer` per session.
+@dataclass(frozen=True)
+class BgpCapture:
+    """One device's `show ip bgp summary`: its own router ID, and one peer per session."""
 
-    Unlike HSRP groups, a session needs no merging across devices -- each row is already a
-    complete `BgpPeer` -- so this returns model entities directly rather than fragments.
-    """
+    router_id: str | None
+    peers: list[BgpPeer]
+
+
+def parse_bgp(local_device: str, raw_text: str, *, platform: str = "cisco_ios") -> BgpCapture:
+    """Parse `local_device`'s `show ip bgp summary` output into a capture of that router."""
     output = extract_command_output(raw_text, _COMMAND_PATTERN)
     if not output:
-        return []
+        return BgpCapture(router_id=None, peers=[])
+
+    records = _run(platform=platform, data=output)
 
     peers = []
-    for record in _run(platform=platform, data=output):
+    for record in records:
         peer = _to_peer(local_device, record)
         if peer is not None:
             peers.append(peer)
-    return peers
+    return BgpCapture(router_id=_router_id(records), peers=peers)
+
+
+def _router_id(records: list[dict[str, Any]]) -> str | None:
+    """The reporting router's BGP router ID, read off the first row.
+
+    The template carries the header line's value down onto every row, so any of them
+    settles it -- the same reasoning that lets `ingest/model_builder.py` take the device's
+    AS number from a single session. A summary whose header printed but which listed no
+    neighbors yields no rows at all, and so no router ID either.
+    """
+    if not records:
+        return None
+    return str(records[0].get("router_id") or "").strip() or None
 
 
 def _run(*, platform: str, data: str) -> list[dict[str, Any]]:

@@ -92,6 +92,7 @@ class Device:
     mgmt_ip: str | None = None  # as a neighbor advertises it over CDP/LLDP
     chassis_id: str | None = None  # base MAC, as an LLDP neighbor advertises it
     asn: int | None = None  # for BGP
+    router_id: str | None = None  # BGP router ID, from its own `show ip bgp summary`
     interfaces: dict[str, Interface] = field(default_factory=dict)  # keyed by normalized name
 
 

@@ -303,3 +303,10 @@ def test_a_bgp_summary_settles_the_devices_own_as_number() -> None:
     model = build_network_model(FileDataSource(BGP_FIXTURES))
     assert model.devices["core-r1"].asn == 65001
     assert model.devices["core-r2"].asn == 65001
+
+
+def test_a_bgp_summary_settles_the_devices_own_router_id() -> None:
+    """The header line names the reporting router, so each device gets its own."""
+    model = build_network_model(FileDataSource(BGP_FIXTURES))
+    assert model.devices["core-r1"].router_id == "10.255.0.1"
+    assert model.devices["core-r2"].router_id == "10.255.0.2"

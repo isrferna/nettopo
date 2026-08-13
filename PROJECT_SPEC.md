@@ -322,6 +322,7 @@ class Device:
     role: DeviceRole = DeviceRole.UNKNOWN  # `platform` if it names a family, else capabilities
     mgmt_ip: str | None = None             # as a neighbor advertises it over CDP/LLDP
     asn: int | None = None                 # for BGP
+    router_id: str | None = None           # BGP router ID, from its own `show ip bgp summary`
     interfaces: dict[str, Interface] = field(default_factory=dict)  # keyed by normalized name
 
 
@@ -497,7 +498,8 @@ render-ready nodes/links. Views never parse text and never write files.
   member could not otherwise be placed. A diagram covers one VLAN and every group on it. Because a grouped diagram
   renders one representative VLAN (as the STP view does) and the virtual IP is precisely
   what differs between grouped VLANs, the gateway node names the VLAN it was drawn from.
-- **`bgp`** — nodes = devices (labeled with ASN), edges = BGP sessions labeled with state;
+- **`bgp`** — nodes = devices (labeled with ASN and BGP router ID, each line dropped when
+  unknown), edges = BGP sessions labeled with state;
   iBGP vs eBGP styled differently (blue and purple link colors). v1 shows the
   neighbor/session graph only: one diagram for the whole network, no VLAN selection, and
   no view-specific options. A peer whose address matches no captured interface is drawn as

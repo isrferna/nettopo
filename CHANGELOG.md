@@ -22,16 +22,25 @@ L2, STP and HSRP views, their filenames and every other CSV table are untouched.
   which is read off whether the neighbor's AS matches the local one. AS numbers written in
   asdot notation (`1.10`) are converted to the single integer the model stores. IOS and
   IOS-XE print the command identically and share the one template; `tests/fixtures/bgp/`
-  carries a fixture for each.
+  carries a fixture for each. The parser returns a `BgpCapture`: the sessions, plus the
+  one fact the summary's header states about the reporting router rather than about any
+  session — its BGP router ID.
 - `Device.asn` is populated, from the local AS number in the device's own summary. It had
   been in the model and in `devices.csv` since Phase 1 with nothing writing it.
+- `Device.router_id`, a new field carrying the `BGP router identifier` from the device's
+  own summary, exported as a `router_id` column in `devices.csv`. It sits on the device
+  rather than on `BgpPeer` because it describes the router, not a session — so `bgp.csv`
+  stays one row per session with no repeated column.
 - Phase 6 BGP view: `views/bgp.py` builds one render-ready `Diagram` for the whole
-  network. Routers are labeled with their AS number, sessions with their state, and
+  network. Routers are labeled with their AS number over their router ID (`RID
+  10.255.0.1`, and any line whose value is unknown is simply left out), sessions with
+  their state, and
   colored blue for iBGP or purple for eBGP. Because `show ip bgp summary` names the far
   end of a session by address only, the view matches each peer address against the
   interface addresses the model already holds: where it finds a captured device, the two
   routers' independent reports of one session collapse into a single link, and where it
-  finds nothing the peer keeps a faded node of its own labeled with its address and AS.
+  finds nothing the peer keeps a faded node of its own labeled with its address and AS —
+  never a router ID, which the summary prints only for the device reporting it.
   That match is a property of the drawing — it never writes `BgpPeer.peer_device`, which
   stays `None` as the spec requires. When the two ends disagree about a session's state,
   both are shown rather than one being silently picked.
@@ -48,6 +57,18 @@ L2, STP and HSRP views, their filenames and every other CSV table are untouched.
   `show version`, `show ip interface brief` and `show ip bgp summary` and nothing else.
   The generated diagram is committed under `examples/bgp-edge/diagrams/bgp/`, the README
   embeds it, and `tests/test_examples_bgp_edge.py` pins it.
+
+### Fixed
+
+- Multi-line node labels are now actually drawn on several lines. Every view since Phase 3
+  has written them with `\n` — `core-sw1\n10.10.10.2`, `dist-sw1\n00a1.b2c3.d011 / 32778`,
+  `VLAN 10 group 10\n10.10.10.1` — and every one of them rendered as a single long line:
+  the label is an XML attribute, where a newline is normalized to a space, and draw.io
+  then draws it as HTML, where a newline is ordinary whitespace. `render/drawio.py`
+  translates it to an HTML `<br>`, the same break link tooltips already used. Node spacing
+  is measured per line to match, since stacked lines are no wider than the longest of
+  them. Every committed example diagram is regenerated; only their labels and layout
+  change, not their content.
 
 ## [0.5.0] - 2026-08-11
 

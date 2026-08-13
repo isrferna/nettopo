@@ -53,10 +53,10 @@ def test_the_diagram_draws_each_session_once(edge: NetworkModel) -> None:
 def test_the_diagram_matches_the_readme_description(edge: NetworkModel) -> None:
     diagram = bgp_view.build(edge)
     assert [node.label for node in diagram.nodes] == [
-        "core-r1\nAS 65001",
-        "core-r2\nAS 65001",
-        "edge-r1\nAS 65001",
-        "198.51.100.1\nAS 65100",
+        "core-r1\nAS 65001\nRID 10.255.0.1",
+        "core-r2\nAS 65001\nRID 10.255.0.2",
+        "edge-r1\nAS 65001\nRID 10.255.0.3",
+        "198.51.100.1\nAS 65100",  # a peer no capture covers has no router ID to show
         "203.0.113.9\nAS 65200",
     ]
     assert [node.id for node in diagram.nodes if node.inferred] == [
@@ -78,6 +78,9 @@ def test_the_mesh_is_matched_through_the_interface_table(edge: NetworkModel) -> 
         ("edge-r1", "10.255.0.3"),
     ):
         assert edge.devices[hostname].interfaces["Lo0"].ip_address == loopback
+        # Realistic captures: each router's BGP router ID is taken from that loopback,
+        # which is why the diagram's RID line repeats an address the matching uses.
+        assert edge.devices[hostname].router_id == loopback
 
     bgp_sections = [
         path.read_text().partition("#show ip bgp summary")[2] for path in BGP_EDGE.glob("*.txt")

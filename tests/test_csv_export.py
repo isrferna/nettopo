@@ -77,6 +77,19 @@ def test_devices_csv_has_one_row_per_device(tmp_path: Path) -> None:
     assert sw1["serial"] == "FOC2134X0ABC"
 
 
+def test_devices_csv_carries_the_bgp_router_id_when_one_is_known(tmp_path: Path) -> None:
+    """A device that speaks no BGP leaves the column empty rather than absent."""
+    model = _sample_model()
+    model.devices["sw1"].asn = 65001
+    model.devices["sw1"].router_id = "10.255.0.1"
+    rows = _read_rows(write_csv_tables(model, tmp_path) / "devices.csv")
+
+    assert {(row["hostname"], row["router_id"]) for row in rows} == {
+        ("sw1", "10.255.0.1"),
+        ("sw2", ""),
+    }
+
+
 def test_neighbors_csv_joins_capabilities_with_semicolons(tmp_path: Path) -> None:
     csv_dir = write_csv_tables(_sample_model(), tmp_path)
     (row,) = _read_rows(csv_dir / "neighbors.csv")

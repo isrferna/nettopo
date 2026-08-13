@@ -291,7 +291,7 @@ command matches a pattern and returns just that command's output slice.
 | `show etherchannel summary`, `show port-channel summary` | `parsing/etherchannel.py` | ntc-templates (see below) | `Interface.po_id`, `Interface.po_members` |
 | `show spanning-tree` | `parsing/spanning_tree.py` | **own regexes** (see below) | `NetworkModel.stp` (`StpBridge`, `StpPort`) — and, when links are bundled, needs `show etherchannel summary` alongside it for the STP view to resolve `Po1` onto its members |
 | `show standby brief` | `parsing/hsrp.py` | ntc-templates | `NetworkModel.hsrp` (`HsrpGroup`, `HsrpMember`) |
-| `show ip bgp summary` | `parsing/bgp.py` | ntc-templates | `NetworkModel.bgp` (`BgpPeer`) and `Device.asn` — the summary's only writer |
+| `show ip bgp summary` | `parsing/bgp.py` | ntc-templates | `NetworkModel.bgp` (`BgpPeer`), plus `Device.asn` and `Device.router_id` — the summary's only writer |
 
 All ntc-templates-backed parsers go through `parsing/_textfsm.py`, a thin typed wrapper
 around `ntc_templates.parse_output` — the one place the untyped `ntc_templates` import
@@ -525,6 +525,18 @@ network — this is a claim about the picture. `export/csv_export.py`'s `_write_
 links, in `examples/bgp-edge/`), which is correct: the CSV is the record, the diagram is
 the reading.
 
+**Why the router ID is a `Device` field.** `show ip bgp summary` opens with
+`BGP router identifier 10.255.0.1, local AS number 65001` — one fact about the reporting
+router, not about any of the sessions below it. The ntc-templates template carries it down
+onto every row, so returning it per `BgpPeer` would repeat one device-level fact once per
+session and put it in `bgp.csv`, which is meant to be one row per session as reported.
+`parsing/bgp.py` therefore returns a `BgpCapture` (router ID plus peers), the same
+capture-wrapper shape `parsing/hsrp.py` uses, and `ingest/model_builder.py` settles
+`Device.router_id` from it exactly as it already settles `Device.asn`. Only a captured
+router can have one: the summary names every far end by address alone, so the view's
+faded `bgp:peer:` nodes keep their address/AS label and the label builder simply omits any
+line whose value is `None`.
+
 **Dedupe and ordering.** A session is keyed on its VRF and its two endpoint ids in a fixed
 order — captured devices before unresolved peers, then by name — so both ends of a
 device-to-device session compute the same key whichever router reported it. When the two
@@ -651,6 +663,17 @@ close enough to overlap. A diagram larger than it strictly needs to be is a smal
 than one whose labels sit on top of each other. The sparseness was addressed where it
 actually came from instead: `_LABEL_CLEARANCE` dropped from 1.5 to 1.3 now that link end
 labels are set smaller than node labels, and the icons themselves are drawn larger.
+
+**Why a node label's lines are counted separately.** Views write a label's lines separated
+by `\n` — `core-sw1\n10.10.10.2`, `VLAN 10 group 10\n10.10.10.1`, `core-r1\nAS 65001\nRID
+10.255.0.1` — and until that break was made real, none of them broke: a draw.io label is an
+XML attribute, where every conforming parser normalizes a newline to a space, and it is
+then drawn as HTML, where a newline is ordinary whitespace. So `render/drawio.py` translates
+`\n` into an HTML `<br>` (spelled escaped, since N2G formats the label into an XML template
+before parsing it) — the same break `views/diagram.py` already uses inside a link tooltip.
+`_minimum_node_separation` then measures the longest *line* rather than the longest label:
+stacked lines are drawn one under another, so a third line makes a label taller, not wider,
+and charging the spacing for its full length would push the whole diagram apart for nothing.
 
 Kamada-Kawai (`kk`) is kept as the algorithm. The alternatives N2G exposes were compared on
 the campus example and all place the closest pair *worse*: `fr` packs it tighter than `kk`

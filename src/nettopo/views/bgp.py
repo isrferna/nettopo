@@ -1,10 +1,10 @@
 """BGP neighbor session graph (PROJECT_SPEC.md section 7).
 
 One diagram for the whole network, not one per anything: BGP sessions do not partition
-into VLANs the way STP and HSRP do. Nodes are routers labeled with their AS number, links
-are sessions labeled with their state, and iBGP and eBGP are drawn in different colors --
-which AS boundary a session crosses is the first thing a reader looks for, and the state
-is what they check next.
+into VLANs the way STP and HSRP do. Nodes are routers labeled with the AS they speak from
+and the router ID they speak as, links are sessions labeled with their state, and iBGP and
+eBGP are drawn in different colors -- which AS boundary a session crosses is the first
+thing a reader looks for, and the state is what they check next.
 
 **Peers are matched by address at drawing time.** `show ip bgp summary` names the far end
 of a session by IP only, and `BgpPeer.peer_device` stays `None` in v1 (section 2). Drawn
@@ -163,9 +163,21 @@ def _build_nodes(
 
 
 def _device_label(model: NetworkModel, hostname: str) -> str:
-    """Name the router, over the AS it speaks BGP from."""
+    """Name the router, over the AS it speaks BGP from and the ID it speaks as.
+
+    Only a router we captured can carry a router ID: `show ip bgp summary` prints one for
+    the device reporting it and names every far end by address alone, so an unresolved
+    peer has none to show. The `RID` prefix is what keeps the line from reading as one
+    more interface address -- which it usually is, since the router ID is conventionally
+    taken from a loopback, the very addresses `_hostname_by_ip` matches peers against.
+    """
     device = model.devices[hostname]
-    return f"{hostname}\nAS {device.asn}" if device.asn is not None else hostname
+    lines = [hostname]
+    if device.asn is not None:
+        lines.append(f"AS {device.asn}")
+    if device.router_id is not None:
+        lines.append(f"RID {device.router_id}")
+    return "\n".join(lines)
 
 
 def _node_role(model: NetworkModel, hostname: str) -> DeviceRole:

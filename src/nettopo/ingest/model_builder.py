@@ -185,12 +185,14 @@ def _populate_source_devices(
             # address is one we have no capture for.
             hsrp_group.virtual_ip = hsrp_group.virtual_ip or hsrp_capture.virtual_ip
 
-        bgp_peers = parse_bgp(hostname, capture.raw_text, platform=platform)
-        model.bgp.extend(bgp_peers)
-        if bgp_peers:
+        bgp_capture = parse_bgp(hostname, capture.raw_text, platform=platform)
+        model.bgp.extend(bgp_capture.peers)
+        if bgp_capture.peers:
             # One `show ip bgp summary` covers one router in one AS, so every session it
             # reports shares the local AS number -- any row settles the device's own.
-            device.asn = bgp_peers[0].local_asn
+            device.asn = bgp_capture.peers[0].local_asn
+        if bgp_capture.router_id is not None:
+            device.router_id = bgp_capture.router_id
 
     return hostname_by_hint
 

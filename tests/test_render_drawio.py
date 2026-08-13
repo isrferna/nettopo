@@ -238,6 +238,32 @@ def test_long_labels_push_the_nodes_further_apart_than_short_ones(tmp_path: Path
     assert _closest_node_pair_distance(long_labels) > _closest_node_pair_distance(short_labels)
 
 
+def test_a_multi_line_node_label_is_broken_where_the_view_broke_it(tmp_path: Path) -> None:
+    """Views separate a label's lines with `\\n`, which draw.io would render as a space.
+
+    The label is an XML attribute (newline normalized to a space by the parser) drawn as
+    HTML (newline is plain whitespace), so the break has to be an HTML one to survive.
+    """
+    output_path = tmp_path / "labels.drawio"
+    render_diagram(
+        Diagram(nodes=[DiagramNode(id="sw1", label="sw1\n10.0.0.1", role=DeviceRole.SWITCH)]),
+        output_path,
+    )
+
+    (node,) = ET.fromstring(output_path.read_text(encoding="utf-8")).findall(".//object")
+    assert node.get("label") == "sw1<br>10.0.0.1"
+
+
+def test_a_multi_line_label_is_measured_by_its_widest_line(tmp_path: Path) -> None:
+    """Its lines are drawn one under another, so stacking more of them is not wider."""
+    stacked = tmp_path / "stacked.drawio"
+    one_line = tmp_path / "one-line.drawio"
+    render_diagram(_ring_diagram("Gi1/0/3\ndesignated\nforwarding"), stacked)
+    render_diagram(_ring_diagram("Gi1/0/3 designated forwarding"), one_line)
+
+    assert _closest_node_pair_distance(stacked) < _closest_node_pair_distance(one_line)
+
+
 def test_a_single_node_diagram_needs_no_spacing_and_still_renders(tmp_path: Path) -> None:
     """There is no pair to measure, so the spacing pass has to leave the node alone."""
     output_path = tmp_path / "stp.drawio"

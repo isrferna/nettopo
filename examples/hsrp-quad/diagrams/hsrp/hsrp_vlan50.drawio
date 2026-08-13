@@ -4,25 +4,25 @@
         <root>
           <mxCell id="0" />   
           <mxCell id="1" parent="0" />
-        <object id="hsrp:vlan50:group50" label="VLAN 50 group 50 10.20.50.1">
+        <object id="hsrp:vlan50:group50" label="VLAN 50 group 50&lt;br&gt;10.20.50.1">
       <mxCell style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4F5F7;strokeColor=#98A2B3;" vertex="1" parent="1">
-          <mxGeometry x="586" y="100" width="120" height="60" as="geometry" />
+          <mxGeometry x="434" y="74" width="120" height="60" as="geometry" />
       </mxCell>
-    </object><object id="bldg-a-sw1" label="bldg-a-sw1 10.20.50.2">
+    </object><object id="bldg-a-sw1" label="bldg-a-sw1&lt;br&gt;10.20.50.2">
       <mxCell style="shape=mxgraph.cisco19.rect;prIcon=l3_switch;strokeColor=#005073;sketch=0;html=1;pointerEvents=1;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fillColor=#FAFAFA;fontSize=12;fontColor=#2B3440;fontStyle=1;fillColor=#FFF3C4;strokeWidth=3;" vertex="1" parent="1">
-          <mxGeometry x="1141" y="681" width="80" height="80" as="geometry" />
+          <mxGeometry x="845" y="504" width="80" height="80" as="geometry" />
       </mxCell>
-    </object><object id="bldg-a-sw2" label="bldg-a-sw2 10.20.50.3">
+    </object><object id="bldg-a-sw2" label="bldg-a-sw2&lt;br&gt;10.20.50.3">
       <mxCell style="shape=mxgraph.cisco19.rect;prIcon=l3_switch;strokeColor=#005073;sketch=0;html=1;pointerEvents=1;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fillColor=#FAFAFA;fontSize=12;fontColor=#2B3440;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="332" y="771" width="80" height="80" as="geometry" />
+          <mxGeometry x="246" y="571" width="80" height="80" as="geometry" />
       </mxCell>
-    </object><object id="bldg-b-sw1" label="bldg-b-sw1 10.20.50.4">
+    </object><object id="bldg-b-sw1" label="bldg-b-sw1&lt;br&gt;10.20.50.4">
       <mxCell style="shape=mxgraph.cisco19.rect;prIcon=l3_switch;strokeColor=#005073;sketch=0;html=1;pointerEvents=1;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fillColor=#FAFAFA;fontSize=12;fontColor=#2B3440;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="1239" y="75" width="80" height="80" as="geometry" />
+          <mxGeometry x="917" y="55" width="80" height="80" as="geometry" />
       </mxCell>
-    </object><object id="bldg-b-sw2" label="bldg-b-sw2 10.20.50.5">
+    </object><object id="bldg-b-sw2" label="bldg-b-sw2&lt;br&gt;10.20.50.5">
       <mxCell style="shape=mxgraph.cisco19.rect;prIcon=l3_switch;strokeColor=#005073;sketch=0;html=1;pointerEvents=1;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fillColor=#FAFAFA;fontSize=12;fontColor=#2B3440;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="917" y="0" width="80" height="80" as="geometry" />
+          <mxGeometry x="679" y="0" width="80" height="80" as="geometry" />
       </mxCell>
     </object><mxCell id="c6e2ecaae2badee6ef28ce8f27c4dcc8-src" value="Vl50 active/150" style="labelBackgroundColor=#FFFFFF;fontSize=9;fontColor=#5A6673;" vertex="1" connectable="0" parent="c6e2ecaae2badee6ef28ce8f27c4dcc8">
       <mxGeometry x="-0.5" relative="1" as="geometry">
@@ -56,6 +56,6 @@
       <mxCell style="endArrow=none;strokeColor=#98A2B3;strokeWidth=1.5;" edge="1" parent="1" source="bldg-b-sw2" target="hsrp:vlan50:group50">
           <mxGeometry relative="1" as="geometry" />
       </mxCell>
-    </object><mxCell id="legend" value="" style="rounded=1;arcSize=4;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE0;verticalAlign=top;align=left;spacingLeft=8;" vertex="1" parent="1"><mxGeometry x="332" y="-262" width="310" height="202" as="geometry" /></mxCell><mxCell id="legend_title" value="Legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2B3440;" vertex="1" parent="1"><mxGeometry x="346" y="-248" width="282" height="22" as="geometry" /></mxCell><mxCell id="legend_sample_0" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4F5F7;strokeColor=#98A2B3;verticalLabelPosition=middle;" vertex="1" parent="1"><mxGeometry x="346" y="-220" width="52" height="26" as="geometry" /></mxCell><mxCell id="legend_label_0" value="Virtual gateway" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="398" y="-226" width="230" height="38" as="geometry" /></mxCell><mxCell id="legend_sample_1" value="" style="shape=mxgraph.cisco19.rect;prIcon=l3_switch;strokeColor=#005073;sketch=0;html=1;pointerEvents=1;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fillColor=#FAFAFA;fontSize=12;fontColor=#2B3440;fontStyle=1;fillColor=#FFF3C4;strokeWidth=3;verticalLabelPosition=middle;" vertex="1" parent="1"><mxGeometry x="359" y="-182" width="26" height="26" as="geometry" /></mxCell><mxCell id="legend_label_1" value="Active router" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="398" y="-188" width="230" height="38" as="geometry" /></mxCell><mxCell id="legend_sample_2" value="" style="rounded=1;arcSize=50;html=1;fillColor=#2E7D32;strokeColor=#2E7D32;" vertex="1" parent="1"><mxGeometry x="354" y="-133" width="36" height="4" as="geometry" /></mxCell><mxCell id="legend_label_2" value="Active for this group" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="398" y="-150" width="230" height="38" as="geometry" /></mxCell><mxCell id="legend_sample_3" value="" style="rounded=1;arcSize=50;html=1;fillColor=#EF6C00;strokeColor=#EF6C00;" vertex="1" parent="1"><mxGeometry x="354" y="-95" width="36" height="4" as="geometry" /></mxCell><mxCell id="legend_label_3" value="Standby for this group" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="398" y="-112" width="230" height="38" as="geometry" /></mxCell></root>
+    </object><mxCell id="legend" value="" style="rounded=1;arcSize=4;html=1;fillColor=#FFFFFF;strokeColor=#D5DAE0;verticalAlign=top;align=left;spacingLeft=8;" vertex="1" parent="1"><mxGeometry x="246" y="-262" width="310" height="202" as="geometry" /></mxCell><mxCell id="legend_title" value="Legend" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#2B3440;" vertex="1" parent="1"><mxGeometry x="260" y="-248" width="282" height="22" as="geometry" /></mxCell><mxCell id="legend_sample_0" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4F5F7;strokeColor=#98A2B3;verticalLabelPosition=middle;" vertex="1" parent="1"><mxGeometry x="260" y="-220" width="52" height="26" as="geometry" /></mxCell><mxCell id="legend_label_0" value="Virtual gateway" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="312" y="-226" width="230" height="38" as="geometry" /></mxCell><mxCell id="legend_sample_1" value="" style="shape=mxgraph.cisco19.rect;prIcon=l3_switch;strokeColor=#005073;sketch=0;html=1;pointerEvents=1;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fillColor=#FAFAFA;fontSize=12;fontColor=#2B3440;fontStyle=1;fillColor=#FFF3C4;strokeWidth=3;verticalLabelPosition=middle;" vertex="1" parent="1"><mxGeometry x="273" y="-182" width="26" height="26" as="geometry" /></mxCell><mxCell id="legend_label_1" value="Active router" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="312" y="-188" width="230" height="38" as="geometry" /></mxCell><mxCell id="legend_sample_2" value="" style="rounded=1;arcSize=50;html=1;fillColor=#2E7D32;strokeColor=#2E7D32;" vertex="1" parent="1"><mxGeometry x="268" y="-133" width="36" height="4" as="geometry" /></mxCell><mxCell id="legend_label_2" value="Active for this group" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="312" y="-150" width="230" height="38" as="geometry" /></mxCell><mxCell id="legend_sample_3" value="" style="rounded=1;arcSize=50;html=1;fillColor=#EF6C00;strokeColor=#EF6C00;" vertex="1" parent="1"><mxGeometry x="268" y="-95" width="36" height="4" as="geometry" /></mxCell><mxCell id="legend_label_3" value="Standby for this group" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6673;" vertex="1" parent="1"><mxGeometry x="312" y="-112" width="230" height="38" as="geometry" /></mxCell></root>
       </mxGraphModel>
     </diagram></mxfile>

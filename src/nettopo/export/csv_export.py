@@ -73,6 +73,7 @@ def _write_devices(path: Path, model: NetworkModel) -> None:
         "role",
         "mgmt_ip",
         "asn",
+        "router_id",
     )
     rows = [
         (
@@ -85,6 +86,7 @@ def _write_devices(path: Path, model: NetworkModel) -> None:
             device.role.value,
             device.mgmt_ip,
             device.asn,
+            device.router_id,
         )
         for device in model.devices.values()
     ]
