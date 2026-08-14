@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0rc1] - 2026-08-13
+## [0.6.0] - 2026-08-14
 
-Release candidate: Phase 6 BGP, to be exercised against real captures before 0.6.0 final.
-Pre-releases are not installed by `pip` unless asked for — `pip install --pre nettopo` or
-`pip install nettopo==0.6.0rc1`.
+Supersedes the `0.6.0rc1` pre-release, which was exercised against real captures; the
+tree is identical to `v0.6.0rc1` and the entries below cover everything that changed
+since `0.5.0`.
 
 Phase 6: BGP. `nettopo bgp` becomes the fifth real command, rendering the BGP neighbor
 session graph, and `bgp.csv` stops being header-only. Two things outside BGP change with
