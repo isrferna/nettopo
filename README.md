@@ -33,7 +33,9 @@ blocking port state and labeled with role/state at each end. `nettopo l2 -i <dir
 post-processed by `lucidify` by default (`--no-lucidify` to skip it), which keeps each
 end's label attached to its own end of the link rather than merging both into one, and
 normalizes the geometry flag N2G gets wrong so the labels survive a Lucidchart import.
-`all` still reports "not implemented". Every working view is shown
+`nettopo all -i <dir>` (Phase 7) runs all
+four views and every CSV export in one pass over a single ingest, writing the whole
+`output/` tree. Every view is shown
 end to end under [Example diagrams](#example-diagrams), generated from the capture sets in
 [`examples/`](examples). See the delivery plan in
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
@@ -265,9 +267,8 @@ nettopo [--version] [--log-level LEVEL] <command> [options]
 
 Every command reads a **directory** of saved capture files (see
 [Preparing captures](#preparing-captures) below) and writes into an output directory,
-creating it if needed. `parse`, `l2`, `stp`, `hsrp` and `bgp` are implemented; `all` is
-scaffolded but not yet implemented (running it prints `'all' is not implemented yet.`
-and exits with status 1 — see [Status](#status)).
+creating it if needed. `parse`, `l2`, `stp`, `hsrp` and `bgp` each produce one part of
+that output; [`all`](#nettopo-all) produces all of it in one run.
 
 ### Global options
 
@@ -283,7 +284,7 @@ and exits with status 1 — see [Status](#status)).
 | `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
 | `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
 | `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
-| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`, `hsrp`, `bgp`; later `all`) — `parse` ignores it. |
+| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`, `hsrp`, `bgp`, `all`) — `parse` ignores it. |
 
 ### `nettopo parse`
 
@@ -302,7 +303,7 @@ CDP's `Management address(es)` block or LLDP's management TLV), `interfaces.csv`
 `neighbors.csv`, `vlans.csv`, `stp.csv` (base *and* effective bridge priority — see
 [PROJECT_SPEC.md §6](PROJECT_SPEC.md#6-data-model)), `hsrp.csv` (one row per group member,
 with the group's virtual IP beside that member's SVI, priority, role and preempt flag),
-and header-only `bgp.csv` until Phase 6 adds that parser.
+and `bgp.csv` (one row per session as each device reported it).
 
 One row per device and per adjacency, regardless of how many names its neighbors use for
 it: CDP and LLDP disagree constantly (`nxos-core1` vs `nxos-core1(FDO21120U5D)` vs
@@ -487,11 +488,49 @@ v1 draws the session graph and nothing more — no route tables, policies, commu
 route-reflector modeling. Only the default VRF is read: `show ip bgp summary` covers it,
 and every row's `vrf` column is `default`.
 
-### `nettopo all` — not yet implemented
+### `nettopo all`
 
-This subcommand parses its arguments but every run currently exits with status 1 and
-logs `'all' is not implemented yet.`. It lands in Phase 7 — see
-[`PROJECT_SPEC.md` §14](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues).
+Runs every view and every CSV export in one invocation, producing the complete `output/`
+tree from [`PROJECT_SPEC.md` §8](PROJECT_SPEC.md#8-rendering-and-export).
+
+```bash
+nettopo all -i ./captures -o ./output
+```
+
+```
+output/
+├── csv/          devices, interfaces, neighbors, vlans, stp, hsrp, bgp
+├── l2/           l2_full.drawio, l2_full_port-channels.drawio, l2_network-only.drawio
+├── stp/          one diagram per VLAN
+├── hsrp/         one diagram per VLAN
+└── bgp/          bgp.drawio
+```
+
+It takes only the [common options](#options-common-to-every-command) — no `--vlan`,
+`--endpoints`, `--link-mode` or `--group-mode`. `all` is the "everything these captures
+support" command, so those choices are made for you:
+
+- **Per-VLAN, always.** The STP view runs as `--group-mode per-vlan`, which never
+  collapses two VLANs into one drawing, and both per-VLAN views draw every VLAN they
+  found. To collapse VLANs that render identically, run
+  [`nettopo stp --group-mode topology`](#nettopo-stp) separately.
+- **Three L2 diagrams.** The physical view, the same view with port-channels collapsed
+  into one link per bundle, and the network-only view (endpoints dropped). The fourth
+  combination — `network-only` *and* port-channels — is left out on purpose: dropping
+  endpoints already removes what makes a dense L2 diagram unreadable, so it would differ
+  from `l2_network-only.drawio` only on the occasional bundle between two network devices.
+  Run [`nettopo l2`](#nettopo-l2) directly if you want it.
+- **A view with no data is skipped, not an error.** Access switches that speak no BGP, or
+  routers with no spanning tree, are ordinary input. Each such view logs a `WARNING`
+  naming what it skipped, no directory is created for it, and the run still exits `0`.
+  Only an unreadable input directory or a failed write makes `all` exit non-zero. A view
+  you asked for by name (`nettopo bgp`) still writes its file, empty — being explicit is
+  the difference.
+
+Ingestion and parsing — the expensive stages — run **once** for all five outputs, rather
+than once per command as running them in sequence would. `all` drives the same views the
+individual commands do, not a second implementation of them: every file it writes is
+byte-identical to what the corresponding command would have produced.
 
 ### Preparing captures
 
@@ -515,6 +554,7 @@ is what each subcommand needs to produce a *complete* result.
 | `stp` | `show spanning-tree` **and** `show cdp neighbors detail` / `show lldp neighbors detail` | `show version` (device naming) · `show etherchannel summary` / `show port-channel summary` (**required** when links are bundled) · `show lldp neighbors detail` (to identify a root bridge outside the captures) |
 | `hsrp` | `show standby brief` | `show ip interface brief` / `show interfaces` (each member's own SVI address on its node) · `show version` (device naming) |
 | `bgp` | `show ip bgp summary` | `show ip interface brief` / `show interfaces` (matches a peer's address to a captured router, so one session is drawn as one link) · `show version` (device naming) |
+| `all` | — | everything in this table; each view it finds no data for is skipped with a warning |
 
 > **`stp` needs CDP/LLDP too.** `show spanning-tree` reports a device's *own* bridge and
 > port roles/states, but never says who is on the other end of a port — on its own it

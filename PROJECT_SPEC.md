@@ -617,6 +617,11 @@ nettopo all     -i ./captures                      # every view + every CSV
 - `--vlan N` restricts to one VLAN (single diagram); mutually exclusive with `--group-mode`.
 - `--group-mode` is `stp`-only and defaults to `per-vlan`; `hsrp` rejects it (see §6).
 - `--all` for `stp`/`hsrp` writes every resulting diagram into `output/<view>/`.
+- `all` takes the common options only. It runs the per-VLAN views over every VLAN with
+  `--group-mode per-vlan`, and writes the three L2 diagrams of the §8 output tree
+  (physical, port-channels, network-only). A view the captures hold no data for is skipped
+  with a warning and the run still exits 0; only an unreadable input or a failed write is
+  an error. `nettopo <view>` named explicitly still writes its diagram, empty.
 
 ---
 

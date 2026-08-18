@@ -1,9 +1,9 @@
 """CLI entry point: argument parsing and orchestration only.
 
-Business logic for each subcommand (ingest -> parse -> model -> view ->
-render/export) is added in later phases per PROJECT_SPEC.md section 14.
-This module must stay free of that logic — it only builds the argument
-parser and dispatches to handlers.
+Each subcommand runs the same pipeline (ingest -> parse -> model -> view ->
+render/export) by calling into the layers that own each stage. The business logic
+itself lives there, not here: this module builds the argument parser, dispatches to a
+handler, and turns the layers' exceptions into an exit code and a log line.
 """
 
 from __future__ import annotations
@@ -27,13 +27,24 @@ from nettopo.views import bgp as bgp_view
 from nettopo.views import hsrp as hsrp_view
 from nettopo.views import l2 as l2_view
 from nettopo.views import stp as stp_view
-from nettopo.views.diagram import VlanDiagramGroup
+from nettopo.views.diagram import Diagram, VlanDiagramGroup
 from nettopo.views.l2 import LinkMode
 
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 _L2_OUTPUT_STEMS = {"all": "l2_full", "network-only": "l2_network-only"}
 _L2_PORT_CHANNEL_SUFFIX = "_port-channels"
+
+# The L2 diagrams `nettopo all` writes, and the whole of PROJECT_SPEC.md section 8's
+# `output/l2/` tree. The fourth combination (network-only over port-channels) is left out
+# deliberately: `network-only` already drops the endpoints that make a dense diagram hard
+# to read, so collapsing its bundles too would differ from `l2_network-only.drawio` only on
+# the rare uplink bundle between two network devices.
+_ALL_L2_VARIANTS: tuple[tuple[str, LinkMode], ...] = (
+    ("all", LinkMode.PHYSICAL),
+    ("all", LinkMode.PORT_CHANNEL),
+    ("network-only", LinkMode.PHYSICAL),
+)
 
 # BGP renders one diagram for the whole network and takes no view-specific options, so
 # unlike the L2 and per-VLAN views its filename is fixed (PROJECT_SPEC.md section 8).
@@ -159,13 +170,55 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_parse(args: argparse.Namespace) -> int:
-    """Ingest captures, populate the model, and write every CSV table."""
+def _load_model(args: argparse.Namespace) -> NetworkModel | None:
+    """Ingest `args.input` into a populated model, or log why it could not be read.
+
+    Every command starts here, and `all` calls it once for all five views: ingestion and
+    parsing are the expensive stages, and nothing downstream of the model mutates it.
+    """
     try:
         source = FileDataSource(args.input)
-        model = build_network_model(source, default_platform=args.platform)
+        return build_network_model(source, default_platform=args.platform)
     except OSError as exc:
         logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        return None
+
+
+def _write_diagram(
+    diagram: Diagram,
+    output_path: Path,
+    *,
+    apply_lucidify: bool,
+    label: str,
+    link_noun: str = "link",
+) -> None:
+    """Render one built diagram and report what it contained."""
+    render_diagram(diagram, output_path, apply_lucidify=apply_lucidify)
+    logger.info(
+        "Rendered %s diagram (%d node(s), %d %s(s)) to %s",
+        label,
+        len(diagram.nodes),
+        len(diagram.links),
+        link_noun,
+        output_path,
+    )
+
+
+def _warn_empty_view(label: str, target: str) -> None:
+    """Report a view the captures held no data for.
+
+    Only `all` runs views the user did not name, so only `all` calls this: a capture set
+    that covers part of the network -- access switches that speak no BGP, say -- is
+    ordinary input, and skipping the view it cannot fill is not a failed run. A user who
+    types `nettopo bgp` asked for that diagram specifically and still gets it, empty.
+    """
+    logger.warning("No %s data in the captures; skipped %s.", label, target)
+
+
+def _run_parse(args: argparse.Namespace) -> int:
+    """Ingest captures, populate the model, and write every CSV table."""
+    model = _load_model(args)
+    if model is None:
         return 1
 
     try:
@@ -181,11 +234,8 @@ def _run_parse(args: argparse.Namespace) -> int:
 
 def _run_l2(args: argparse.Namespace) -> int:
     """Ingest captures, populate the model, and render the L2 draw.io diagram."""
-    try:
-        source = FileDataSource(args.input)
-        model = build_network_model(source, default_platform=args.platform)
-    except OSError as exc:
-        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+    model = _load_model(args)
+    if model is None:
         return 1
 
     link_mode = LinkMode(args.link_mode)
@@ -194,17 +244,11 @@ def _run_l2(args: argparse.Namespace) -> int:
     try:
         output_root = resolve_output_root(args.output)
         output_path = output_root / "l2" / _l2_output_filename(args.endpoints, link_mode)
-        render_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify)
+        _write_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify, label="L2")
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
 
-    logger.info(
-        "Rendered L2 diagram (%d node(s), %d link(s)) to %s",
-        len(diagram.nodes),
-        len(diagram.links),
-        output_path,
-    )
     return 0
 
 
@@ -247,29 +291,38 @@ def _run_vlan_view(args: argparse.Namespace, view: _VlanDiagramView) -> int:
         logger.error("'%s' requires either --vlan <N> or --all.", view.name)
         return 1
 
-    try:
-        source = FileDataSource(args.input)
-        model = build_network_model(source, default_platform=args.platform)
-    except OSError as exc:
-        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+    model = _load_model(args)
+    if model is None:
         return 1
 
     groups = view.build_groups(model, args)
 
     try:
         output_root = resolve_output_root(args.output)
-        for group in groups:
-            output_path = output_root / view.name / view.output_filename(group.vlan_ids)
-            render_diagram(group.diagram, output_path, apply_lucidify=not args.no_lucidify)
-            _log_vlan_diagram(view, group, output_path)
-            if view.warn_about is not None:
-                view.warn_about(group)
+        _render_vlan_groups(view, groups, output_root, apply_lucidify=not args.no_lucidify)
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
 
-    logger.info("Rendered %d %s diagram(s) to %s", len(groups), view.label, output_root / view.name)
     return 0
+
+
+def _render_vlan_groups(
+    view: _VlanDiagramView,
+    groups: list[VlanDiagramGroup],
+    output_root: Path,
+    *,
+    apply_lucidify: bool,
+) -> None:
+    """Write one diagram per group into `output/<view>/`."""
+    for group in groups:
+        output_path = output_root / view.name / view.output_filename(group.vlan_ids)
+        render_diagram(group.diagram, output_path, apply_lucidify=apply_lucidify)
+        _log_vlan_diagram(view, group, output_path)
+        if view.warn_about is not None:
+            view.warn_about(group)
+
+    logger.info("Rendered %d %s diagram(s) to %s", len(groups), view.label, output_root / view.name)
 
 
 def _log_vlan_diagram(view: _VlanDiagramView, group: VlanDiagramGroup, output_path: Path) -> None:
@@ -339,11 +392,8 @@ def _run_hsrp(args: argparse.Namespace) -> int:
 
 def _run_bgp(args: argparse.Namespace) -> int:
     """Ingest captures, populate the model, and render the BGP session graph."""
-    try:
-        source = FileDataSource(args.input)
-        model = build_network_model(source, default_platform=args.platform)
-    except OSError as exc:
-        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+    model = _load_model(args)
+    if model is None:
         return 1
 
     diagram = bgp_view.build(model)
@@ -351,24 +401,89 @@ def _run_bgp(args: argparse.Namespace) -> int:
     try:
         output_root = resolve_output_root(args.output)
         output_path = output_root / "bgp" / _BGP_OUTPUT_FILENAME
-        render_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify)
+        _write_diagram(
+            diagram,
+            output_path,
+            apply_lucidify=not args.no_lucidify,
+            label="BGP",
+            link_noun="session",
+        )
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
 
-    logger.info(
-        "Rendered BGP diagram (%d node(s), %d session(s)) to %s",
-        len(diagram.nodes),
-        len(diagram.links),
-        output_path,
-    )
     return 0
 
 
-def _run_unimplemented(args: argparse.Namespace) -> int:
-    """Placeholder handler: no view/render logic exists yet (Phase 5+)."""
-    logger.error("'%s' is not implemented yet.", args.command)
-    return 1
+def _run_all(args: argparse.Namespace) -> int:
+    """Write every CSV table and every view's diagrams from one ingested model.
+
+    The views take no options here: `all` is the "give me everything this capture set
+    supports" command, so it draws every VLAN of the per-VLAN views (`--group-mode
+    per-vlan`, which never collapses two VLANs into one drawing) and every L2 variant
+    PROJECT_SPEC.md section 8's output tree lists. A view the captures hold no data for is
+    skipped with a warning rather than failing the run -- see `_warn_empty_view`.
+    """
+    model = _load_model(args)
+    if model is None:
+        return 1
+
+    apply_lucidify = not args.no_lucidify
+    try:
+        output_root = resolve_output_root(args.output)
+        csv_dir = write_csv_tables(model, output_root)
+        logger.info("Parsed %d device(s); wrote CSV tables to %s", len(model.devices), csv_dir)
+
+        _render_all_l2_diagrams(model, output_root, apply_lucidify=apply_lucidify)
+
+        for view, groups in (
+            (_STP_VIEW, stp_view.build_groups(model, group_mode=GroupMode.PER_VLAN)),
+            (_HSRP_VIEW, hsrp_view.build_groups(model)),
+        ):
+            if not groups:
+                _warn_empty_view(view.label, f"output/{view.name}/")
+                continue
+            _render_vlan_groups(view, groups, output_root, apply_lucidify=apply_lucidify)
+
+        bgp_diagram = bgp_view.build(model)
+        if bgp_diagram.nodes:
+            _write_diagram(
+                bgp_diagram,
+                output_root / "bgp" / _BGP_OUTPUT_FILENAME,
+                apply_lucidify=apply_lucidify,
+                label="BGP",
+                link_noun="session",
+            )
+        else:
+            _warn_empty_view("BGP", f"output/bgp/{_BGP_OUTPUT_FILENAME}")
+    except OSError as exc:
+        logger.error("Failed to write output to '%s': %s", args.output, exc)
+        return 1
+
+    logger.info("Finished 'all': output written to %s", output_root)
+    return 0
+
+
+def _render_all_l2_diagrams(
+    model: NetworkModel, output_root: Path, *, apply_lucidify: bool
+) -> None:
+    """Write each of `all`'s L2 variants the captures hold adjacencies for.
+
+    Emptiness is judged on links, not nodes: an L2 diagram is a drawing of adjacencies,
+    and captures with no CDP/LLDP output still yield one node per device, so a node count
+    alone would write a page of unconnected boxes. The `network-only` variant is judged
+    separately -- it can come out empty while the full one is not, when every discovered
+    neighbor is an endpoint.
+    """
+    for endpoints, link_mode in _ALL_L2_VARIANTS:
+        diagram = l2_view.build(model, endpoints=endpoints, link_mode=link_mode)
+        filename = _l2_output_filename(endpoints, link_mode)
+        if not diagram.links:
+            _warn_empty_view("L2 neighbor", f"output/l2/{filename}")
+            continue
+        _write_diagram(
+            diagram, output_root / "l2" / filename, apply_lucidify=apply_lucidify, label="L2"
+        )
 
 
 _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
@@ -377,7 +492,7 @@ _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "stp": _run_stp,
     "hsrp": _run_hsrp,
     "bgp": _run_bgp,
-    "all": _run_unimplemented,
+    "all": _run_all,
 }
 
 

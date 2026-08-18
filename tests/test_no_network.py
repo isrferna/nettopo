@@ -1,8 +1,10 @@
 """Zero-network-connections guarantee (PROJECT_SPEC.md section 11).
 
-Monkeypatches `socket.socket` to fail and asserts `nettopo parse` still succeeds on a
-fixture capture set — proving no code path in ingestion, parsing, model population, or
-CSV export opens a socket. This is a verifiable guarantee, not a promise in prose.
+Monkeypatches `socket.socket` to fail and asserts every command still succeeds on a
+fixture capture set — proving no code path in ingestion, parsing, model population,
+rendering or CSV export opens a socket. This is a verifiable guarantee, not a promise in
+prose. `nettopo all` is the one that makes it exhaustive: it drives every view and every
+export in a single run, so a socket opened anywhere in the tool fails this test.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from nettopo.cli import main
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
 HSRP_TOPOLOGY = Path(__file__).parent / "fixtures" / "hsrp_topology"
 BGP_TOPOLOGY = Path(__file__).parent / "fixtures" / "bgp_topology"
+CAMPUS = Path(__file__).parent.parent / "examples" / "campus"
 
 
 def _deny_all_sockets(*_args: object, **_kwargs: object) -> None:
@@ -79,3 +82,26 @@ def test_bgp_command_makes_zero_network_connections(
 
     assert exit_code == 0
     assert (tmp_path / "output" / "bgp" / "bgp.drawio").exists()
+
+
+def test_all_command_makes_zero_network_connections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exhaustive case: every view and every export, in one run, with no sockets.
+
+    Two capture sets, because no single one covers all four views: `examples/campus/`
+    exercises the CSV tables and the L2, STP and HSRP renderers, and `bgp_topology/` the
+    BGP renderer.
+    """
+    monkeypatch.setattr(socket, "socket", _deny_all_sockets)
+
+    campus_output = tmp_path / "campus"
+    bgp_output = tmp_path / "bgp"
+    assert main(["all", "-i", str(CAMPUS), "-o", str(campus_output)]) == 0
+    assert main(["all", "-i", str(BGP_TOPOLOGY), "-o", str(bgp_output)]) == 0
+
+    assert (campus_output / "csv" / "devices.csv").exists()
+    assert (campus_output / "l2" / "l2_full_port-channels.drawio").exists()
+    assert (campus_output / "stp" / "stp_vlan10.drawio").exists()
+    assert (campus_output / "hsrp" / "hsrp_vlan10.drawio").exists()
+    assert (bgp_output / "bgp" / "bgp.drawio").exists()

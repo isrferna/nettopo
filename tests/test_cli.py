@@ -3,6 +3,7 @@ ingest -> model -> CSV pipeline (PROJECT_SPEC.md sections 4, 8, 9)."""
 
 from __future__ import annotations
 
+import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -11,9 +12,9 @@ import pytest
 from nettopo.cli import build_parser, main
 
 ALL_COMMANDS = {"parse", "l2", "stp", "hsrp", "bgp", "all"}
-UNIMPLEMENTED_COMMANDS = ALL_COMMANDS - {"parse", "l2", "stp", "hsrp", "bgp"}
 
 CAPTURES = Path(__file__).parent / "fixtures" / "captures"
+CAMPUS = Path(__file__).parent.parent / "examples" / "campus"
 STP_TOPOLOGY = Path(__file__).parent / "fixtures" / "stp_topology"
 HSRP_TOPOLOGY = Path(__file__).parent / "fixtures" / "hsrp_topology"
 BGP_TOPOLOGY = Path(__file__).parent / "fixtures" / "bgp_topology"
@@ -55,12 +56,6 @@ def test_hsrp_does_not_accept_group_mode() -> None:
     with pytest.raises(SystemExit) as excinfo:
         parser.parse_args(["hsrp", "-i", ".", "--all", "--group-mode", "topology"])
     assert excinfo.value.code == 2
-
-
-@pytest.mark.parametrize("command", sorted(UNIMPLEMENTED_COMMANDS))
-def test_unimplemented_commands_report_not_implemented(command: str, tmp_path: Path) -> None:
-    exit_code = main([command, "-i", str(tmp_path)])
-    assert exit_code == 1
 
 
 def test_parse_command_writes_every_csv_table(tmp_path: Path) -> None:
@@ -257,4 +252,95 @@ def test_bgp_diagram_draws_one_link_per_session_not_per_report(tmp_path: Path) -
 
 def test_bgp_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
     exit_code = main(["bgp", "-i", str(tmp_path / "does-not-exist")])
+    assert exit_code == 1
+
+
+def test_all_command_writes_every_view_and_every_csv_table(tmp_path: Path) -> None:
+    """`nettopo all` on a capture set covering four views produces the whole output tree.
+
+    `examples/campus/` is the only capture set that carries L2, STP and HSRP at once; it
+    speaks no BGP, which the next test covers from the other side.
+    """
+    output_dir = tmp_path / "output"
+    exit_code = main(["all", "-i", str(CAMPUS), "-o", str(output_dir)])
+
+    assert exit_code == 0
+    assert {path.name for path in (output_dir / "csv").iterdir()} == {
+        "devices.csv",
+        "interfaces.csv",
+        "neighbors.csv",
+        "vlans.csv",
+        "stp.csv",
+        "hsrp.csv",
+        "bgp.csv",
+    }
+    # PROJECT_SPEC.md section 8's output/l2/ tree, in full.
+    assert {path.name for path in (output_dir / "l2").iterdir()} == {
+        "l2_full.drawio",
+        "l2_full_port-channels.drawio",
+        "l2_network-only.drawio",
+    }
+    # One diagram per VLAN, never a grouped one: `all` runs the STP view per-vlan.
+    assert {path.name for path in (output_dir / "stp").iterdir()} == {
+        "stp_vlan10.drawio",
+        "stp_vlan20.drawio",
+        "stp_vlan30.drawio",
+        "stp_vlan99.drawio",
+    }
+    assert {path.name for path in (output_dir / "hsrp").iterdir()} == {
+        "hsrp_vlan10.drawio",
+        "hsrp_vlan20.drawio",
+        "hsrp_vlan30.drawio",
+    }
+
+
+def test_all_command_renders_each_view_exactly_as_its_own_command_does(tmp_path: Path) -> None:
+    """`all` drives the same views, not a second implementation of them."""
+    from_all = tmp_path / "from-all"
+    from_l2 = tmp_path / "from-l2"
+    main(["all", "-i", str(CAMPUS), "-o", str(from_all)])
+    main(["l2", "-i", str(CAMPUS), "-o", str(from_l2), "--link-mode", "port-channel"])
+
+    rendered_by_all = (from_all / "l2" / "l2_full_port-channels.drawio").read_text(encoding="utf-8")
+    rendered_by_l2 = (from_l2 / "l2" / "l2_full_port-channels.drawio").read_text(encoding="utf-8")
+    assert rendered_by_all == rendered_by_l2
+
+
+def test_all_command_skips_the_views_the_captures_hold_no_data_for(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A partial capture set is ordinary input: the run warns, skips, and still succeeds."""
+    output_dir = tmp_path / "output"
+    with caplog.at_level(logging.WARNING, logger="nettopo"):
+        exit_code = main(["all", "-i", str(BGP_TOPOLOGY), "-o", str(output_dir)])
+
+    assert exit_code == 0
+    assert (output_dir / "bgp" / "bgp.drawio").exists()
+    # These routers report no neighbors, no spanning tree and no standby groups.
+    assert not (output_dir / "stp").exists()
+    assert not (output_dir / "hsrp").exists()
+    assert not (output_dir / "l2").exists()
+    assert "No STP data" in caplog.text
+    assert "No HSRP data" in caplog.text
+    assert "No L2 neighbor data" in caplog.text
+
+
+def test_all_command_writes_no_diagram_for_a_capture_set_with_no_devices(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An empty input directory writes the (header-only) CSV tables and nothing else."""
+    empty_input = tmp_path / "captures"
+    empty_input.mkdir()
+    output_dir = tmp_path / "output"
+
+    with caplog.at_level(logging.WARNING, logger="nettopo"):
+        exit_code = main(["all", "-i", str(empty_input), "-o", str(output_dir)])
+
+    assert exit_code == 0
+    assert {path.name for path in output_dir.iterdir()} == {"csv"}
+    assert "No BGP data" in caplog.text
+
+
+def test_all_command_fails_cleanly_on_a_missing_input_directory(tmp_path: Path) -> None:
+    exit_code = main(["all", "-i", str(tmp_path / "does-not-exist")])
     assert exit_code == 1
