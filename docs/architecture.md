@@ -7,7 +7,7 @@ rule in [`CLAUDE.md`](../CLAUDE.md). For scope, the full data model, and the CLI
 reference, see [`PROJECT_SPEC.md`](../PROJECT_SPEC.md); for user-facing command/option
 docs, see the [README](../README.md#usage).
 
-## Current state (Phase 6)
+## Current state (Phase 7)
 
 | Command | Status | Reads | Writes |
 |---|---|---|---|
@@ -16,10 +16,10 @@ docs, see the [README](../README.md#usage).
 | `nettopo stp` | real | `show spanning-tree` | `output/stp/*.drawio`, `stp.csv` rows |
 | `nettopo hsrp` | real | `show standby brief` | `output/hsrp/*.drawio`, `hsrp.csv` rows |
 | `nettopo bgp` | real | `show ip bgp summary` | `output/bgp/bgp.drawio`, `bgp.csv` rows |
-| `nettopo all` | argument parsing only | — | exits 1, "not implemented yet" |
+| `nettopo all` | real | every capture | the whole `output/` tree |
 
-`all` lands in Phase 7 (`PROJECT_SPEC.md` §14). The rest of this document
-describes both what exists today and the target architecture that phase builds into.
+Every command in `PROJECT_SPEC.md` §9 is implemented; what follows describes the
+architecture as it stands.
 
 ## System overview
 
@@ -130,6 +130,34 @@ sequenceDiagram
     end
     CLI-->>User: "Rendered N STP diagram(s) to output/stp"
 ```
+
+### What `nettopo all` adds to that flow
+
+`all` is the same flow with the model built once and then handed to each view in turn:
+one `_load_model()`, then `write_csv_tables()`, the three L2 variants, the two per-VLAN
+views, and BGP. Nothing downstream of the model mutates it, so the five outputs can share
+one ingest — which is the only reason `all` exists as a command rather than as a shell
+loop over the other five.
+
+It reuses the very same helpers the individual commands call (`_render_vlan_groups()`,
+`_write_diagram()`), so a view cannot render differently under `all` than under its own
+command; `tests/test_cli.py` pins that by comparing the two files byte for byte.
+
+Two behaviors are `all`'s alone, and both follow from it running views the user did not
+name:
+
+- **It takes no view options.** `--vlan`, `--group-mode`, `--endpoints` and `--link-mode`
+  are absent, and the views run with the settings that lose nothing: `GroupMode.PER_VLAN`
+  for STP (grouping collapses VLANs that render identically, which is a reading
+  convenience, not more information), every VLAN for both per-VLAN views, and the three L2
+  variants of §8's output tree.
+- **An empty view is skipped, not an error** (`_warn_empty_view()`). A capture set covering
+  part of the network is ordinary input, so a view with nothing to draw logs a warning,
+  writes no directory, and leaves the exit code at 0; only an unreadable input or a failed
+  write fails the run. A user who types `nettopo bgp` asked for that one diagram and still
+  gets it, empty — the distinction is whether the user named the view. For L2, "empty" is
+  judged on *links*, not nodes: captures with no CDP/LLDP still yield one node per device,
+  and a page of unconnected boxes is not a topology.
 
 ## Ingestion and model building
 
@@ -784,17 +812,18 @@ which are draw.io style overrides. Checklist for whoever runs this:
 
 `nettopo` makes zero network connections by design — it only reads local capture files
 and writes local output files. `tests/test_no_network.py` enforces this by
-monkeypatching `socket.socket` to fail and asserting a full run still succeeds; Phase 3
-extends the base `parse`-only test to cover `nettopo l2` now that it pulls in
-N2G/igraph, Phase 4 extends it again to cover `nettopo stp`, Phase 5 again for
-`nettopo hsrp`, Phase 6 again for `nettopo bgp`, and it will extend further to cover
-`nettopo all` once Phase 7 adds that command.
+monkeypatching `socket.socket` to fail and asserting a full run still succeeds. It grew
+one case per command as the commands landed — `parse`, then `l2` once it pulled in
+N2G/igraph, then `stp`, `hsrp` and `bgp` — and Phase 7 closes it with `nettopo all`, which
+drives every view and every export in a single run. That last case is what makes the
+guarantee exhaustive rather than per-command: a socket opened anywhere in the tool now
+fails this test.
 
 `utils/paths.py`'s `resolve_output_root()` is used by every command to resolve `-o`/
 `--output` to an absolute path before anything is written. Its `sanitize_filename_component()`
 and `safe_join()` guard against a filename derived from parsed data (e.g. a hostname
 like `../../etc`) escaping the output directory; today's real output filenames don't
-yet need them in practice — `l2`'s two filenames are a fixed lookup table, and `stp`'s
+yet need them in practice — `l2`'s filenames are a fixed lookup table, and `stp`'s
 and `hsrp`'s come from the same `vlan_diagram_filename()` over VLAN ids, which are ints
 parsed out of the model rather than arbitrary path input, so they can't contain a path
 separator — but the helpers are unit-tested

@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase 7: `nettopo all` becomes real, and with it the zero-network guarantee covers the
+whole tool in one run.
+
+### Added
+
+- `nettopo all -i <dir>` runs every view and every CSV export in one invocation, writing
+  the complete `output/` tree from `PROJECT_SPEC.md` section 8: the seven CSV tables, the
+  three L2 diagrams, one STP and one HSRP diagram per VLAN, and the BGP session graph.
+  Ingestion and parsing run once for all five outputs rather than once per command, which
+  is the reason it is a command and not a shell loop — nothing downstream of the model
+  mutates it, so the views can share one ingest. It drives the same view and render
+  helpers the individual commands do, so each file it writes is byte-identical to what
+  the corresponding command would have produced.
+- `all` takes only the common options (`-i`, `-o`, `--platform`, `--no-lucidify`) — no
+  `--vlan`, `--endpoints`, `--link-mode` or `--group-mode`. The views run with the
+  settings that lose nothing: every VLAN, drawn one diagram per VLAN (`--group-mode
+  per-vlan`, which never collapses two VLANs into one drawing), and the three L2 variants
+  the output tree names — physical, port-channels collapsed, and network-only. The fourth
+  combination (`network-only` over port-channels) is deliberately not written: dropping
+  endpoints already removes what makes a dense L2 diagram unreadable, so it would differ
+  from `l2_network-only.drawio` only on the occasional bundle between two network devices.
+- A view the captures hold no data for is skipped with a `WARNING` naming what was
+  skipped, and the run still exits 0 — a capture set covering part of the network (access
+  switches that speak no BGP, routers with no spanning tree) is ordinary input, not a
+  failed run. No directory is created for a skipped view. Only an unreadable input
+  directory or a failed write makes `all` exit non-zero. Commands named explicitly are
+  unchanged: `nettopo bgp` on captures with no BGP still writes its (empty) diagram. For
+  L2 the emptiness test is the link count, not the node count: captures with no CDP/LLDP
+  still yield one node per device, and a page of unconnected boxes is not a topology.
+- `tests/test_no_network.py` covers a full `nettopo all` run, which completes the hard
+  requirement from `PROJECT_SPEC.md` section 11. The test's earlier cases each covered one
+  command; this one drives every view and every export under the same `socket.socket` ban,
+  so a socket opened anywhere in the tool now fails it.
+
+### Changed
+
+- `cli.py`'s five handlers share `_load_model()` for the ingest step and `_write_diagram()`
+  for the render-and-log step, extracted so `all` could reuse them rather than repeat
+  them. No behavior changes for the individual commands; the BGP command's log line still
+  counts sessions rather than links.
+
+### Removed
+
+- `cli.py`'s `_run_unimplemented` placeholder handler, which had no remaining caller once
+  `all` became real, and the CLI test that asserted `all` exits 1.
+
 ## [0.6.0] - 2026-08-14
 
 Supersedes the `0.6.0rc1` pre-release, which was exercised against real captures; the
