@@ -132,10 +132,10 @@ nettopo/
 │       │   └── csv_export.py
 │       └── utils/
 │           ├── __init__.py
-│           ├── command_sections.py  # split a capture into per-command output slices
+│           ├── command_sections.py  # the capture format: split it, and write it
 │           ├── hostnames.py   # THE device-name normalizer (central service)
 │           ├── interfaces.py  # THE interface-name normalizer (central service)
-│           └── paths.py       # output-path resolution and filename sanitization
+│           └── paths.py       # capture-dir default, path resolution, filename sanitization
 └── tests/
     ├── fixtures/              # anonymized real captures used as parser inputs
     ├── test_examples_*.py     # keeps each examples/ set matching what the README shows
@@ -591,8 +591,13 @@ Filenames derived from hostnames/VLANs must be sanitized (see §11, path handlin
 Console script: `nettopo`. Subcommand per concern. Argument parsing lives only in `cli.py`;
 it orchestrates ingest → parse → model → view → render/export and contains no business logic.
 
-**Common options:** `-i/--input <dir>` (required), `-o/--output <dir>` (default `./output`),
-`--platform <default>` (default `cisco_ios`), `--log-level`.
+**Common options:** `-i/--input <dir>` (default `~/configs`), `-o/--output <dir>` (default
+`./output`), `--platform <default>` (default `cisco_ios`), `--log-level`.
+
+`~/configs` is the shared capture directory. The tilde is expanded by
+`utils/paths.resolve_input_root()`, not by the shell: argparse hands its default over
+verbatim, so an unexpanded default would resolve to a relative directory named `~` and
+fail with a misleading "input directory not found".
 
 ```
 nettopo parse   -i ./captures                      # parse only; write all CSV tables

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `utils/command_sections.format_command_section()`: the inverse of
+  `extract_command_output()`, rendering one command's output as the prompt-prefixed
+  section the parsers read back. Groundwork for live collection, which must synthesize
+  the device prompt line itself because netmiko strips the echoed command and prompt from
+  its output. Kept beside the reader so the two halves of the format cannot drift, and
+  covered by a round-trip test against every parser's command pattern.
+- `utils/paths.resolve_input_root()` and `DEFAULT_CAPTURE_DIR`.
+
+### Changed
+
+- `-i`/`--input` is no longer required and defaults to `~/configs` on every command, so a
+  capture directory can be named once instead of on every invocation. Nothing that worked
+  before stops working: the flag is still accepted exactly as it was, and omitting it
+  previously exited 2 rather than doing anything useful.
+- `parsing.version._detect_os()` is now public as `detect_os()`. A live collector needs
+  to classify a device before any template can be selected, and the only signal available
+  at that point is the `show version` it has just collected.
+
 ## [0.7.0] - 2026-08-18
 
 Phase 7: `nettopo all` becomes real, and with it the zero-network guarantee covers the

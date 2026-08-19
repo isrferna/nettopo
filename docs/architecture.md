@@ -53,7 +53,7 @@ flowchart LR
 | `views/` | One module per diagram (`l2`, `stp`, `hsrp`, `bgp`). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
 | `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
-| `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
+| `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (the multi-command capture format, read and write), `paths.py` (the shared capture-directory default, path resolution, filename sanitization). |
 | `cli.py` | `argparse` setup and per-command orchestration only — no parsing or rendering logic lives here. |
 
 ### Layering rule (Dependency Inversion)
@@ -165,6 +165,40 @@ reading a directory of saved captures. v1 ships file-based ingestion only (see
 `PROJECT_SPEC.md` section 2, "out of scope"), but the interface exists now so that a
 future live-collection source (netmiko/scrapli over SSH) can be added by implementing
 the same interface, without touching `parsing/`, `model/`, or `views/`.
+
+### Why the capture format has a writer, not just a reader
+
+`utils/command_sections.py` now goes both ways: `extract_command_output()` reads a
+command's output out of a capture, and `format_command_section()` writes one in.
+
+The writer exists because a live collector cannot reuse what it receives. netmiko's
+`send_command` strips the echoed command *and* the trailing prompt from its output by
+default, so the `hostname#show ...` line every parser locates its section by is simply
+not in the data — it has to be synthesized. Doing that in the collector would put the
+format's two halves in different modules, where nothing stops them drifting; keeping them
+adjacent makes the relationship testable as a property (`extract(format(x)) == x`) with
+no SSH and no collector involved, which is how `tests/test_command_sections.py` checks it
+against every parser's command pattern.
+
+The writer refuses a hostname containing whitespace. `_PROMPT_LINE` matches `\S+`, so a
+space in the prompt would not just break that section — it would make the parser skip
+past it and mis-attribute everything that follows. Failing at the point of writing turns a
+silently empty diagram into an immediate, local error.
+
+### Why `-i` defaults to `~/configs`
+
+The default is shared: it is where a future `collect` writes captures and where every
+existing command reads them, so the two halves of the workflow line up without the path
+being typed twice.
+
+It is expanded by `utils/paths.resolve_input_root()` rather than left to the shell,
+because argparse hands a default over verbatim — no shell ever sees it. An unexpanded
+`~/configs` resolves to a *relative* directory literally named `~`, which
+`FileDataSource` then reports as "input directory not found", pointing at a path that
+does not exist anywhere. `resolve_input_root()` deliberately does not create the
+directory, unlike `resolve_output_root()`: a missing input directory is a fact to report,
+not one to paper over. `_load_model()` logs the resolved path for the same reason — a
+user who never passed `-i` should be told about `/Users/x/configs`, not about `~/configs`.
 
 ### Three-phase model building
 

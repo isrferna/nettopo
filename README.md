@@ -267,6 +267,9 @@ Every command reads a **directory** of saved capture files (see
 creating it if needed. `parse`, `l2`, `stp`, `hsrp` and `bgp` each produce one part of
 that output; [`all`](#nettopo-all) produces all of it in one run.
 
+That input directory defaults to `~/configs`, so once your captures live there you can
+drop `-i` entirely and just run `nettopo all`.
+
 ### Global options
 
 | Option | Values | Default | Meaning |
@@ -278,7 +281,7 @@ that output; [`all`](#nettopo-all) produces all of it in one run.
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
-| `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
+| `-i`, `--input` | directory path | `~/configs` | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). The tilde is expanded by nettopo, so the default works even when the shell never sees it. |
 | `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
 | `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
 

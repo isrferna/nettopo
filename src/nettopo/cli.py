@@ -22,7 +22,7 @@ from nettopo.ingest.model_builder import build_network_model
 from nettopo.model.entities import NetworkModel
 from nettopo.model.grouping import GroupMode
 from nettopo.render.drawio import render_diagram
-from nettopo.utils.paths import resolve_output_root
+from nettopo.utils.paths import DEFAULT_CAPTURE_DIR, resolve_input_root, resolve_output_root
 from nettopo.views import bgp as bgp_view
 from nettopo.views import hsrp as hsrp_view
 from nettopo.views import l2 as l2_view
@@ -55,7 +55,10 @@ logger = logging.getLogger("nettopo")
 
 def _add_common_arguments(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
-        "-i", "--input", required=True, help="Directory containing device captures."
+        "-i",
+        "--input",
+        default=DEFAULT_CAPTURE_DIR,
+        help="Directory containing device captures (default: %(default)s).",
     )
     subparser.add_argument(
         "-o",
@@ -171,11 +174,14 @@ def _load_model(args: argparse.Namespace) -> NetworkModel | None:
     Every command starts here, and `all` calls it once for all five views: ingestion and
     parsing are the expensive stages, and nothing downstream of the model mutates it.
     """
+    input_root = resolve_input_root(args.input)
     try:
-        source = FileDataSource(args.input)
+        source = FileDataSource(input_root)
         return build_network_model(source, default_platform=args.platform)
     except OSError as exc:
-        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        # The resolved path, not `args.input`: a user who never passed `-i` would
+        # otherwise be told that '~/configs' is missing, which no shell would show them.
+        logger.error("Failed to read captures from '%s': %s", input_root, exc)
         return None
 
 

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nettopo.utils.paths import resolve_output_root, safe_join, sanitize_filename_component
+import pytest
+
+from nettopo.utils.paths import (
+    DEFAULT_CAPTURE_DIR,
+    resolve_input_root,
+    resolve_output_root,
+    safe_join,
+    sanitize_filename_component,
+)
 
 
 def test_sanitize_filename_component_strips_path_separators() -> None:
@@ -48,3 +56,21 @@ def test_safe_join_with_repeated_dot_dot_components_stays_inside_root(tmp_path: 
     root = resolve_output_root(tmp_path)
     joined = safe_join(root, "..", "..", "etc", "passwd")
     assert root in joined.parents or joined == root
+
+
+def test_resolve_input_root_expands_a_tilde(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """argparse hands its default over verbatim, so `~/configs` must be expanded here."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    resolved = resolve_input_root(DEFAULT_CAPTURE_DIR)
+
+    assert "~" not in str(resolved)
+    assert resolved == (tmp_path / "configs").resolve()
+
+
+def test_resolve_input_root_does_not_create_the_directory(tmp_path: Path) -> None:
+    """Unlike the output root: a missing input directory is an error to report, not to fix."""
+    target = tmp_path / "not-there"
+    assert resolve_input_root(target) == target.resolve()
+    assert not target.exists()
