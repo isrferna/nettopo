@@ -15,7 +15,6 @@ from N2G import drawio_diagram
 
 from nettopo.render.icons import LINK_LABEL_STYLE, MAX_NODE_WIDTH_PX, link_style, node_style
 from nettopo.render.legend import add_legend
-from nettopo.render.lucidify import lucidify_xml
 from nettopo.views.diagram import Diagram, DiagramLink
 
 _DIAGRAM_ID = "diagram_1"
@@ -42,12 +41,8 @@ _LABEL_CLEARANCE = 1.3
 _LABEL_LINE_BREAK = "&lt;br&gt;"
 
 
-def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool = True) -> None:
-    """Render `diagram` to a draw.io file at `output_path`.
-
-    Applies the Lucidchart-friendliness post-process by default; pass
-    `apply_lucidify=False` for the CLI's `--no-lucidify`.
-    """
+def render_diagram(diagram: Diagram, output_path: Path) -> None:
+    """Render `diagram` to a draw.io file at `output_path`."""
     drawing = drawio_diagram()
     drawing.add_diagram(_DIAGRAM_ID)
 
@@ -85,8 +80,6 @@ def render_diagram(diagram: Diagram, output_path: Path, *, apply_lucidify: bool 
         add_legend(drawing.current_root, diagram.legend, _top_left(drawing))
 
     xml_text = drawing.dump_xml()
-    if apply_lucidify:
-        xml_text = lucidify_xml(xml_text)
 
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)

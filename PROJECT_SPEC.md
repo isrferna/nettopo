@@ -53,8 +53,6 @@ returns 404). No rename needed for the v0.1.0 release.
 - draw.io output with **Cisco icons** per device role.
 - **CSV export** of every intermediate table (neighbors, VLANs, STP, HSRP, BGP).
 - Bulk generation into a structured `output/` tree (e.g. `output/stp/`).
-- A **link-label post-process** (`lucidify`) that keeps each end's label attached to its
-  own end of the link and intact through a Lucidchart import.
 
 ### Explicitly out of scope (v1) — YAGNI
 
@@ -69,7 +67,8 @@ returns 404). No rename needed for the v0.1.0 release.
   interface addresses the model already holds, so that one session between two captured
   routers is drawn as one link rather than four disconnected boxes — that is a property of
   the drawing, not of the model, and it writes nothing back (see §7).
-- Native Lucidchart API integration. v1 targets draw.io files that Lucid imports.
+- Any Lucidchart support. draw.io is the one tool these diagrams target — see
+  `docs/architecture.md` for what a Lucid import does to a generated file.
 - Any telemetry or network egress. The tool must make **zero** network connections (see §11).
 
 ---
@@ -121,12 +120,11 @@ nettopo/
 │       │   ├── stp.py
 │       │   ├── hsrp.py
 │       │   └── bgp.py
-│       ├── render/            # draw.io emission via N2G, styling, icons, lucidify
+│       ├── render/            # draw.io emission via N2G, styling, icons
 │       │   ├── __init__.py
 │       │   ├── drawio.py      # thin wrapper over N2G drawio_diagram
 │       │   ├── icons.py       # DeviceRole -> Cisco icon, palette, link styles
-│       │   ├── legend.py      # the diagram's key, drawn from the same styles
-│       │   └── lucidify.py    # post-process draw.io XML for Lucid import
+│       │   └── legend.py      # the diagram's key, drawn from the same styles
 │       ├── export/            # CSV writers
 │       │   ├── __init__.py
 │       │   └── csv_export.py
@@ -528,27 +526,18 @@ render-ready nodes/links. Views never parse text and never write files.
   diagram itself used, so a legend cannot drift from the picture. Legend cells are
   appended after layout and written as bare `mxCell`s, which keeps them out of both the
   spacing pass and any consumer counting the diagram's edges.
-- `render/lucidify.py` post-processes the draw.io XML so link labels survive Lucid import
-  and stay readable: N2G emits per-end interface labels as child-vertex cells with relative
-  geometry, which Lucid mangles, and merging the two ends into one label would run them
-  together into a single string — unusable in the STP view, where each end carries its own
-  role/state. N2G's own construct — a label cell parented to the edge, positioned along it
-  by relative geometry — is the right one and is kept: draw.io treats it as that edge's
-  label, so it moves with the link and the Arrange layouts skip it. What N2G gets wrong is
-  writing `relative="-1"` on the target-end label instead of `relative="1"`, which draw.io
-  tolerates but a stricter importer does not; `lucidify` normalizes that flag and cleans
-  malformed styles. Applied to every generated diagram by default (a `--no-lucidify` flag
-  can disable it).
+- Per-end interface labels are left exactly as N2G writes them: a label cell parented to
+  the link's own edge, positioned along it by a relative geometry. draw.io treats such a
+  cell as that edge's label, so it moves with the link and the Arrange layouts skip it,
+  and keeping the two ends separate is what the STP view needs — merged into one string
+  they say nothing about which switch is which. Nothing post-processes the XML.
 
-> **Known limitation:** `mxgraph.cisco19.*` shapes are drawn by draw.io's own code. On
-> Lucid import they may degrade to plain boxes because Lucid uses a different shape
-> library, and the cisco19 set makes that *less* likely to survive than the classic
-> stencils it replaced, since these icons are rendered by a draw.io JavaScript shape rather
-> than looked up as a named stencil. Cisco icons are a confirmed requirement and draw.io is
-> where the diagrams are read and exported from, so this tradeoff is taken deliberately.
-> **Status:** rendering is implemented (`render/drawio.py`, `render/icons.py`,
-> `render/legend.py`, `render/lucidify.py`); the live Lucid import itself is a manual step
-> not yet performed — see the checklist in `docs/architecture.md`.
+> **Known limitation:** `mxgraph.cisco19.*` shapes are drawn by draw.io's own code, and
+> nothing outside draw.io implements them. Cisco icons are a confirmed requirement and
+> draw.io is where these diagrams are read, edited and exported from, so this is simply
+> what the tool targets. A Lucidchart export was built and then removed — what its
+> importer does to a generated file, and why supporting it was not worth the cost, is
+> recorded in `docs/architecture.md`.
 
 ### Layout
 
@@ -601,7 +590,7 @@ Console script: `nettopo`. Subcommand per concern. Argument parsing lives only i
 it orchestrates ingest → parse → model → view → render/export and contains no business logic.
 
 **Common options:** `-i/--input <dir>` (required), `-o/--output <dir>` (default `./output`),
-`--platform <default>` (default `cisco_ios`), `--no-lucidify`, `--log-level`.
+`--platform <default>` (default `cisco_ios`), `--log-level`.
 
 ```
 nettopo parse   -i ./captures                      # parse only; write all CSV tables
@@ -718,15 +707,14 @@ change.
 - **Phase 2 — L2 parsing + CSV.** `ingest/files.py`, CDP/LLDP parsers, `version.py`,
   populate the model, `nettopo parse` writing all CSV tables. First tangible output.
 - **Phase 3 — L2 view (v0.1 release).** draw.io render wrapper, icons, endpoint filter
-  (`all` / `network-only`), interface labels, MLAG, `lucidify`. **Validate Lucid import
-  fidelity here.** First usable PyPI release.
+  (`all` / `network-only`), interface labels, MLAG. First usable PyPI release.
 - **Phase 4 — STP.** `spanning_tree.py` parser, `StpVlan` population, per-VLAN + both
   grouping modes, `output/stp/` bulk generation, STP CSV.
 - **Phase 5 — HSRP.** `hsrp.py` parser, `standby brief`, per-VLAN + grouping, `output/hsrp/`,
   HSRP CSV. Structurally analogous to STP.
 - **Phase 6 — BGP.** `bgp.py` parser (`bgp summary`), session graph, iBGP/eBGP styling,
   BGP CSV. `peer_device` stays `None`.
-- **Phase 7 — Polish.** `lucidify` refinements, per-view layout tuning, docs, `nettopo all`.
+- **Phase 7 — Polish.** Per-view layout tuning, docs, `nettopo all`.
 
 Each phase after Phase 3 is an incremental PyPI release. Publish early; L2 done well is
 worth more than a half-finished grand plan.

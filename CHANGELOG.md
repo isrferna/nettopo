@@ -8,7 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 Phase 7: `nettopo all` becomes real, and with it the zero-network guarantee covers the
-whole tool in one run.
+whole tool in one run. Lucidchart support is dropped: draw.io is now the one tool these
+diagrams target.
+
+### Removed
+
+- **Breaking:** the Lucidchart post-process and its `--no-lucidify` flag. `render/lucidify.py`
+  is deleted and `render_diagram()` no longer takes `apply_lucidify`; generated `.drawio`
+  files now carry N2G's output exactly as it comes, which is what draw.io reads.
+
+  It was removed after the live Lucid import it existed for was finally run — about forty
+  test imports into a real account. Lucid's importer rejects any file containing the legend
+  outright, ignores the `<object>` label N2G puts hostnames in, draws none of the
+  `mxgraph.cisco19.*` icons, refuses every form of embedded SVG/PNG artwork, and drops
+  `fillColor` and `opacity` on the classic Cisco stencils it *does* map — which is how the
+  STP view marks the root bridge and how uncaptured devices are faded. Supporting it meant
+  giving up the legend, the icons or the marks that carry each view's meaning. The findings
+  are kept in `docs/architecture.md` so the decision is not re-litigated from scratch.
+
+  Two cosmetic quirks in N2G's output come back with it: `relative="-1"` on target-end
+  labels and doubled semicolons in style strings. draw.io reads both correctly, and
+  normalizing them existed only to serve an importer that is no longer a target.
+
+- The `examples/` diagrams are regenerated without the post-process. Only those two quirks
+  differ; the layout, the styles and the committed PNG exports are unchanged.
 
 ### Added
 
@@ -20,7 +43,7 @@ whole tool in one run.
   mutates it, so the views can share one ingest. It drives the same view and render
   helpers the individual commands do, so each file it writes is byte-identical to what
   the corresponding command would have produced.
-- `all` takes only the common options (`-i`, `-o`, `--platform`, `--no-lucidify`) — no
+- `all` takes only the common options (`-i`, `-o`, `--platform`) — no
   `--vlan`, `--endpoints`, `--link-mode` or `--group-mode`. The views run with the
   settings that lose nothing: every VLAN, drawn one diagram per VLAN (`--group-mode
   per-vlan`, which never collapses two VLANs into one drawing), and the three L2 variants

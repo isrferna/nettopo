@@ -29,10 +29,8 @@ spanning-tree diagrams: the root bridge is highlighted, links are colored by for
 blocking port state and labeled with role/state at each end. `nettopo l2 -i <dir>`
 (Phase 3) renders devices styled with Cisco icons (`render/icons.py`) by inferred
 `DeviceRole`, with per-end interface labels, `--endpoints all|network-only` filtering and
-`--link-mode physical|port-channel` (MLAG links drawn once per bundle). Output is
-post-processed by `lucidify` by default (`--no-lucidify` to skip it), which keeps each
-end's label attached to its own end of the link rather than merging both into one, and
-normalizes the geometry flag N2G gets wrong so the labels survive a Lucidchart import.
+`--link-mode physical|port-channel` (MLAG links drawn once per bundle). Every diagram is
+plain draw.io XML, written as N2G emits it: draw.io is the one tool these files target.
 `nettopo all -i <dir>` (Phase 7) runs all
 four views and every CSV export in one pass over a single ingest, writing the whole
 `output/` tree. Every view is shown
@@ -41,12 +39,11 @@ end to end under [Example diagrams](#example-diagrams), generated from the captu
 [`PROJECT_SPEC.md`](PROJECT_SPEC.md#14-delivery-plan-sequential-github-issues) and the
 open issues for the phased build-out.
 
-> **Pending manual step:** Cisco `mxgraph.cisco19.*` draw.io icons are a confirmed
-> requirement but may degrade on Lucidchart import (Lucid uses a different shape
-> library, and these icons are drawn by draw.io's own code rather than looked up as
-> named stencils). This still needs a real Lucid import to validate, which requires
-> interactive Lucid access this project's automation doesn't have — see the checklist in
-> [`docs/architecture.md`](docs/architecture.md#known-limitation-cisco-icons-under-lucid-import).
+> **draw.io only.** The Cisco `mxgraph.cisco19.*` icons are drawn by draw.io's own code
+> and no other tool implements them, so these files are meant to be opened in draw.io.
+> Lucidchart export was tried and dropped — [`docs/architecture.md`](docs/architecture.md#why-there-is-no-lucidchart-export)
+> records what its importer does to a generated file and why supporting it was not worth
+> the cost.
 
 ## Installation
 
@@ -284,7 +281,6 @@ that output; [`all`](#nettopo-all) produces all of it in one run.
 | `-i`, `--input` | directory path | *(required)* | Directory of saved device captures to read. See [Preparing captures](#preparing-captures). |
 | `-o`, `--output` | directory path | `./output` | Directory to write generated output into (created if it doesn't exist). |
 | `--platform` | an [ntc-templates](https://github.com/networktocode/ntc-templates) platform name | `cisco_ios` | Fallback platform used to pick the right parsing template when a device's own platform can't be detected from its `show version` output. IOS and IOS-XE both use `cisco_ios`. |
-| `--no-lucidify` | flag | off | Skip the link-label post-process (`render/lucidify.py`) on generated `.drawio` files, leaving N2G's raw per-end label cells in place. Only affects commands that render diagrams (`l2`, `stp`, `hsrp`, `bgp`, `all`) — `parse` ignores it. |
 
 ### `nettopo parse`
 

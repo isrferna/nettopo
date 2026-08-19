@@ -53,19 +53,16 @@ def test_node_style_reflects_its_role(tmp_path: Path) -> None:
     assert "mxgraph.cisco19.rect;prIcon=router" in router_cell.get("style", "")
 
 
-def test_no_lucidify_leaves_n2gs_raw_label_cells_in_place(tmp_path: Path) -> None:
-    output_path = tmp_path / "l2.drawio"
-    render_diagram(_diagram(), output_path, apply_lucidify=False)
-
-    xml_text = output_path.read_text(encoding="utf-8")
-    assert 'value="Gi1/0/1"' in xml_text
-    assert 'value="Gi0/0/0"' in xml_text
-    assert 'relative="-1"' in xml_text  # the defect lucidify normalizes
-
-
-def test_lucidify_applied_by_default_keeps_end_labels_attached_to_their_link(
+def test_each_link_end_keeps_its_own_interface_label_attached_to_the_link(
     tmp_path: Path,
 ) -> None:
+    """Each end's label is a cell parented to the link, never one merged string.
+
+    A vertex parented to an edge is that edge's label in draw.io: it travels with the link
+    and the Arrange layouts skip it instead of laying it out as a node of its own. Merging
+    the two ends would also destroy the STP view, where each end carries its own
+    role/state.
+    """
     output_path = tmp_path / "l2.drawio"
     render_diagram(_diagram(), output_path)
 
@@ -79,15 +76,8 @@ def test_lucidify_applied_by_default_keeps_end_labels_attached_to_their_link(
 
     for cell in labels:
         assert cell.get("parent") == link_id
-        geometry = cell.find("./mxGeometry")
-        assert geometry is not None
-        assert geometry.get("relative") == "1"
+        assert cell.find("./mxGeometry") is not None
 
-    # The two ends are never merged into one label on the link itself.
-    assert link_object.get("label") == ""
-
-    link_object = root.find(".//object[@source='sw1'][@target='rtr1']")
-    assert link_object is not None
     assert link_object.get("label") == ""
 
 
@@ -136,7 +126,7 @@ def _edge_style(output_path: Path) -> str:
 
 def test_link_color_is_applied_to_the_edge_style(tmp_path: Path) -> None:
     output_path = tmp_path / "stp.drawio"
-    render_diagram(_colored_link_diagram(), output_path, apply_lucidify=False)
+    render_diagram(_colored_link_diagram(), output_path)
 
     assert "strokeColor=#C62828;" in _edge_style(output_path)
 
@@ -147,7 +137,7 @@ def test_a_colored_link_is_still_drawn_without_an_arrowhead(tmp_path: Path) -> N
     # out with draw.io's arrowhead -- pointing whichever way the view happened to order the
     # edge's ends, which in the STP view is alphabetical and therefore meaningless.
     output_path = tmp_path / "stp.drawio"
-    render_diagram(_colored_link_diagram(), output_path, apply_lucidify=False)
+    render_diagram(_colored_link_diagram(), output_path)
 
     style = _edge_style(output_path)
     assert "endArrow=none;" in style
@@ -156,7 +146,7 @@ def test_a_colored_link_is_still_drawn_without_an_arrowhead(tmp_path: Path) -> N
 
 def test_an_uncolored_link_is_drawn_without_an_arrowhead(tmp_path: Path) -> None:
     output_path = tmp_path / "l2.drawio"
-    render_diagram(_diagram(), output_path, apply_lucidify=False)
+    render_diagram(_diagram(), output_path)
 
     assert "endArrow=none;" in _edge_style(output_path)
 
