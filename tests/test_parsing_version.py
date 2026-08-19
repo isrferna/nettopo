@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nettopo.parsing.version import parse_version
+import pytest
+
+from nettopo.parsing.version import detect_os, parse_version
 
 FIXTURES = Path(__file__).parent / "fixtures" / "version"
 
@@ -32,3 +34,23 @@ def test_parse_version_iosxe() -> None:
 
 def test_parse_version_returns_none_when_command_absent() -> None:
     assert parse_version("router#show clock\n10:00:00 UTC\n") is None
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_os"),
+    [("ios_show_version.txt", "ios"), ("iosxe_show_version.txt", "ios-xe")],
+)
+def test_detect_os_classifies_the_captured_platforms(fixture_name: str, expected_os: str) -> None:
+    """Public because the collector needs the answer before any template can be chosen."""
+    assert detect_os((FIXTURES / fixture_name).read_text()) == expected_os
+
+
+def test_detect_os_recognizes_nxos() -> None:
+    """Inline rather than a fixture: there is no NX-OS `show version` capture in the tree,
+    and `detect_os` reads one banner line, so a whole chassis dump would prove nothing more."""
+    banner = "Cisco Nexus Operating System (NX-OS) Software\n  system: version 9.3(8)"
+    assert detect_os(banner) == "nxos"
+
+
+def test_detect_os_falls_back_to_ios_for_unrecognized_output() -> None:
+    assert detect_os("something that mentions no platform at all") == "ios"

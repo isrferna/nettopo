@@ -13,6 +13,14 @@ from pathlib import Path
 
 _UNSAFE_CHARS = re.compile(r"[\\/:*?\"<>|\s]+")
 
+# Where captures live by default: `collect` writes here and every other command reads
+# here, so the two halves of the workflow line up without the user naming a path twice.
+DEFAULT_CAPTURE_DIR = "~/configs"
+
+# The collection report goes to the directory the command was run from, not to the capture
+# directory: it is a record of that run, not part of the capture set.
+DEFAULT_REPORT_NAME = "nettopo-collect-report.csv"
+
 
 def sanitize_filename_component(value: str, *, fallback: str = "unknown") -> str:
     """Reduce `value` to characters safe for use as a single path segment.
@@ -23,6 +31,16 @@ def sanitize_filename_component(value: str, *, fallback: str = "unknown") -> str
     """
     stripped = _UNSAFE_CHARS.sub("_", value).strip("._")
     return stripped or fallback
+
+
+def resolve_input_root(input_dir: str | Path) -> Path:
+    """Resolve an input directory to an absolute path, without creating it.
+
+    Only a shell expands a tilde it actually sees, and argparse hands over its default
+    verbatim -- so `DEFAULT_CAPTURE_DIR` has to be expanded here or it resolves to a
+    relative directory literally named `~`.
+    """
+    return Path(input_dir).expanduser().resolve()
 
 
 def resolve_output_root(output_dir: str | Path) -> Path:

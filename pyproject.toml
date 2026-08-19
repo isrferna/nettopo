@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nettopo"
-version = "0.7.0"
+version = "0.8.0"
 description = "Generate draw.io network diagrams (L2, STP, HSRP, BGP) from saved Cisco show-command captures."
 readme = "README.md"
 license = { text = "MIT" }
@@ -28,6 +28,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Live collection only. The core install stays free of any networking library, which is
+# what keeps the zero-network guarantee in PROJECT_SPEC.md section 11 true by
+# construction rather than by discipline. `cli.py` imports these lazily, inside the
+# `collect` handler, so `import nettopo.cli` never reaches them.
+collect = [
+    "netmiko>=4.3.0",
+    "PyYAML>=6.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
@@ -35,6 +43,7 @@ dev = [
     "mypy>=1.11.0",
     "build>=1.2.0",
     "twine>=5.1.0",
+    "types-PyYAML>=6.0",
 ]
 
 [project.scripts]
@@ -73,6 +82,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "N2G.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "netmiko.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

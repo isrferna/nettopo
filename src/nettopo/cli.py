@@ -13,7 +13,7 @@ import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from nettopo import __version__
 from nettopo.export.csv_export import write_csv_tables
@@ -22,13 +22,25 @@ from nettopo.ingest.model_builder import build_network_model
 from nettopo.model.entities import NetworkModel
 from nettopo.model.grouping import GroupMode
 from nettopo.render.drawio import render_diagram
-from nettopo.utils.paths import resolve_output_root
+from nettopo.utils.paths import (
+    DEFAULT_CAPTURE_DIR,
+    DEFAULT_REPORT_NAME,
+    resolve_input_root,
+    resolve_output_root,
+)
 from nettopo.views import bgp as bgp_view
 from nettopo.views import hsrp as hsrp_view
 from nettopo.views import l2 as l2_view
 from nettopo.views import stp as stp_view
 from nettopo.views.diagram import Diagram, VlanDiagramGroup
 from nettopo.views.l2 import LinkMode
+
+if TYPE_CHECKING:
+    # Annotations only. These modules reach netmiko, and `collect` is the one command
+    # that may need it -- importing them here at runtime would make every other command
+    # require an optional dependency it never uses.
+    from nettopo.ingest.files import CaptureWriter
+    from nettopo.ingest.live import CollectionResult
 
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
@@ -55,7 +67,10 @@ logger = logging.getLogger("nettopo")
 
 def _add_common_arguments(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
-        "-i", "--input", required=True, help="Directory containing device captures."
+        "-i",
+        "--input",
+        default=DEFAULT_CAPTURE_DIR,
+        help="Directory containing device captures (default: %(default)s).",
     )
     subparser.add_argument(
         "-o",
@@ -162,7 +177,83 @@ def build_parser() -> argparse.ArgumentParser:
     all_parser = subparsers.add_parser("all", help="Generate every view and every CSV table.")
     _add_common_arguments(all_parser)
 
+    _add_collect_parser(subparsers)
+
     return parser
+
+
+def _add_collect_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Define `collect`, the one command that opens a network connection.
+
+    It shares no options with the others: they read a capture directory, this one writes
+    it. `-o` therefore defaults to the same `~/configs` the others read from, so the two
+    halves of the workflow line up without a path being typed twice.
+    """
+    collect_parser = subparsers.add_parser(
+        "collect",
+        help="Collect show-command captures from live devices over SSH.",
+        description=(
+            "Connects to every device in the inventory, runs the show commands the other "
+            "subcommands parse, and writes one capture file per device named after that "
+            "device's own hostname. Credentials are asked for on the terminal and are "
+            "never stored. This is the only nettopo command that opens a network "
+            "connection, and it only ever sends 'show' commands."
+        ),
+    )
+    collect_parser.add_argument(
+        "-I",
+        "--inventory",
+        required=True,
+        help=(
+            "File listing the devices to collect from: one device per line (.txt), "
+            "or a YAML list (.yaml/.yml)."
+        ),
+    )
+    collect_parser.add_argument(
+        "-o",
+        "--output",
+        default=DEFAULT_CAPTURE_DIR,
+        help="Directory to write capture files into (default: %(default)s).",
+    )
+    collect_parser.add_argument(
+        "--report",
+        default=DEFAULT_REPORT_NAME,
+        help=(
+            "Where to write the run report CSV, relative to the current directory. "
+            "Use '-' for stdout (default: %(default)s)."
+        ),
+    )
+    collect_parser.add_argument(
+        "-u",
+        "--user",
+        help="SSH username. Prompted for if omitted; there is deliberately no password flag.",
+    )
+    collect_parser.add_argument(
+        "--port", type=int, default=22, help="SSH port (default: %(default)s)."
+    )
+    collect_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help=(
+            "Seconds to wait for the connection, banner and authentication (default: %(default)s)."
+        ),
+    )
+    collect_parser.add_argument(
+        "--command-timeout",
+        type=float,
+        default=120.0,
+        help="Seconds to wait for one command's output (default: %(default)s).",
+    )
+    collect_parser.add_argument(
+        "--host-key-checking",
+        choices=("strict", "none"),
+        default="strict",
+        help=(
+            "Whether a device's SSH host key must already be known. 'none' accepts any "
+            "key and is for labs only (default: %(default)s)."
+        ),
+    )
 
 
 def _load_model(args: argparse.Namespace) -> NetworkModel | None:
@@ -171,11 +262,14 @@ def _load_model(args: argparse.Namespace) -> NetworkModel | None:
     Every command starts here, and `all` calls it once for all five views: ingestion and
     parsing are the expensive stages, and nothing downstream of the model mutates it.
     """
+    input_root = resolve_input_root(args.input)
     try:
-        source = FileDataSource(args.input)
+        source = FileDataSource(input_root)
         return build_network_model(source, default_platform=args.platform)
     except OSError as exc:
-        logger.error("Failed to read captures from '%s': %s", args.input, exc)
+        # The resolved path, not `args.input`: a user who never passed `-i` would
+        # otherwise be told that '~/configs' is missing, which no shell would show them.
+        logger.error("Failed to read captures from '%s': %s", input_root, exc)
         return None
 
 
@@ -471,6 +565,132 @@ def _render_all_l2_diagrams(model: NetworkModel, output_root: Path) -> None:
         _write_diagram(diagram, output_root / "l2" / filename, label="L2")
 
 
+def _run_collect(args: argparse.Namespace) -> int:
+    """Collect captures from live devices and write the run report.
+
+    netmiko and PyYAML ship only in the `collect` extra, so their importers are pulled in
+    here rather than at module scope: `import nettopo.cli` -- and therefore every other
+    command -- must neither reach them nor require them to be installed.
+    """
+    try:
+        from nettopo.export.collect_report import write_collect_report
+        from nettopo.ingest.credentials import CredentialError, prompt_credentials
+        from nettopo.ingest.files import CaptureWriter
+        from nettopo.ingest.inventory import InventoryError, load_inventory
+        from nettopo.ingest.live import LiveDataSource
+    except ImportError as exc:
+        # The underlying message is kept so a genuine import bug in our own modules stays
+        # diagnosable rather than being misread as a missing extra.
+        logger.error(
+            "'collect' needs the optional SSH backend. Install it with: "
+            "pip install 'nettopo[collect]' (%s)",
+            exc,
+        )
+        return 1
+
+    try:
+        targets = load_inventory(args.inventory)
+        credentials = prompt_credentials(username=args.user)
+    except (InventoryError, CredentialError) as exc:
+        logger.error("%s", exc)
+        return 1
+
+    if args.host_key_checking == "none":
+        logger.warning(
+            "Host key checking is off: an unknown key will be accepted, so a machine "
+            "impersonating a device would receive these credentials. Labs only."
+        )
+
+    logger.info("Collecting from %d device(s): %s", len(targets), ", ".join(targets))
+
+    try:
+        output_root = resolve_output_root(args.output)
+    except OSError as exc:
+        logger.error("Failed to prepare output directory '%s': %s", args.output, exc)
+        return 1
+
+    writer = CaptureWriter(output_root)
+    source = LiveDataSource(
+        targets,
+        credentials,
+        port=args.port,
+        timeout=args.timeout,
+        command_timeout=args.command_timeout,
+        strict_host_keys=args.host_key_checking == "strict",
+    )
+
+    try:
+        result = source.collect(on_capture=writer.write)
+    except OSError as exc:
+        logger.error("Failed to write captures to '%s': %s", output_root, exc)
+        return 1
+
+    _warn_about_duplicate_hostnames(result, writer)
+
+    try:
+        write_collect_report(
+            result,
+            path=Path(args.report),
+            paths_by_target=writer.paths_by_target,
+            duplicates_by_target={
+                outcome.target: writer.duplicates_of(outcome.target) for outcome in result.outcomes
+            },
+        )
+    except OSError as exc:
+        logger.error("Failed to write the collection report to '%s': %s", args.report, exc)
+        return 1
+
+    return _report_collection_summary(result, output_root)
+
+
+def _warn_about_duplicate_hostnames(result: CollectionResult, writer: CaptureWriter) -> None:
+    """Say so, loudly, when two devices answer to the same name.
+
+    Worth a warning of its own because the consequence lands somewhere else entirely:
+    `model.devices` is keyed by hostname, so a later `nettopo all` will merge these two
+    boxes into a single node with both of their links. Distinct filenames do not prevent
+    that -- only fixing the hostnames does -- and at collection time nettopo knows what
+    the model never will: that these are two different devices at two different addresses.
+    """
+    for outcome in result.outcomes:
+        duplicates = writer.duplicates_of(outcome.target)
+        if not outcome.is_ok or not duplicates:
+            continue
+        logger.warning(
+            "%s reports the hostname '%s', which %s also reports. Their captures are kept "
+            "apart, but a diagram built from them will merge these devices into one node "
+            "until the hostnames differ.",
+            outcome.target,
+            outcome.capture.device_hint if outcome.capture else "?",
+            ", ".join(duplicates),
+        )
+
+
+def _report_collection_summary(result: CollectionResult, output_root: Path) -> int:
+    """Log what the run achieved and turn it into an exit code.
+
+    Anything short of every device collected is a failure: `nettopo collect && nettopo all`
+    is the obvious composition, and a partial capture set quietly producing a partial
+    diagram is the failure mode this tool exists to prevent.
+    """
+    counts = result.counts_by_status()
+    collected = counts["ok"]
+
+    if result.succeeded:
+        logger.info("Collected %d device(s) into %s", collected, output_root)
+        return 0
+
+    logger.error(
+        "Collected %d of %d device(s); %d failed, %d skipped for enable, %d not attempted.",
+        collected,
+        len(result.outcomes),
+        counts["failed"],
+        counts["no-enable"],
+        counts["skipped"],
+    )
+    return 1
+
+
 _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "parse": _run_parse,
     "l2": _run_l2,
@@ -478,6 +698,7 @@ _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "hsrp": _run_hsrp,
     "bgp": _run_bgp,
     "all": _run_all,
+    "collect": _run_collect,
 }
 
 

@@ -46,12 +46,18 @@ def parse_version(raw_text: str, *, platform: str = "cisco_ios") -> VersionInfo 
         hostname=record.get("hostname") or None,
         platform=f"cisco {model}" if model else None,
         model=model,
-        os=_detect_os(output),
+        os=detect_os(output),
         serial=serials[0] if serials else None,
     )
 
 
-def _detect_os(version_output: str) -> str:
+def detect_os(version_output: str) -> str:
+    """Classify a `show version` output as `ios`, `ios-xe` or `nxos`.
+
+    Public because a live collector needs the same answer before this module's own
+    parser can run: it has to know which platform's command set to send, and the only
+    signal available at that point is the `show version` it just collected.
+    """
     lowered = version_output.lower()
     if "nx-os" in lowered:
         return "nxos"

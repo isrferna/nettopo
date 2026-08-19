@@ -21,8 +21,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install package with dev dependencies
-        run: pip install -e ".[dev]"
+      - name: Install package with dev and collect dependencies
+        # `collect` is included so the collector and its tests are type-checked and run.
+        # The `core-install` job below covers the other half: that none of it is needed.
+        run: pip install -e ".[dev,collect]"
 
       - name: Ruff lint
         run: ruff check .
@@ -35,3 +37,40 @@ jobs:
 
       - name: Pytest
         run: pytest --cov-report=xml
+
+  core-install:
+    # Makes the "a core install opens no sockets" claim checkable rather than prose: it
+    # installs nettopo without the `collect` extra and proves the diagram pipeline runs
+    # with no networking library present at all.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the core package only
+        run: pip install -e .
+
+      - name: No networking library is installed
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import sys
+
+          present = [name for name in ("netmiko", "paramiko") if importlib.util.find_spec(name)]
+          if present:
+              sys.exit(f"core install pulled in a networking library: {present}")
+          PY
+
+      - name: Every diagram command still works
+        run: nettopo all -i examples/campus -o "$RUNNER_TEMP/output"
+
+      - name: Collect explains the missing extra instead of crashing
+        run: |
+          printf 'sw1\n' > "$RUNNER_TEMP/inventory.txt"
+          nettopo collect --inventory "$RUNNER_TEMP/inventory.txt" 2>&1 | tee "$RUNNER_TEMP/collect.log"
+          grep -q "nettopo\[collect\]" "$RUNNER_TEMP/collect.log"
+          grep -qv "Traceback" "$RUNNER_TEMP/collect.log"

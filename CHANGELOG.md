@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-19
+
+Phase 8: nettopo can now gather its own captures. `nettopo collect` connects to the devices
+in an inventory over SSH, runs the same `show` commands a hand-saved capture would contain,
+and writes one file per device — so the workflow becomes `nettopo collect && nettopo all`
+with no paths typed at all.
+
+The design is deliberately narrow. Credentials are asked for on the terminal and never
+stored, which is why the inventory is a plain list with nothing sensitive in it and needs no
+encryption. Collection is read-only and serial. The SSH backend is an optional extra, so a
+core install still has no networking library in it.
+
+### Added
+
+- **`nettopo collect --inventory <file>`.** Collects captures from live devices over SSH and
+  writes one `.txt` per device, named after the device's own hostname — so an inventory of
+  bare IP addresses still produces `sw-core.txt`. Needs the new optional extra:
+  `pip install 'nettopo[collect]'`.
+- **Inventory** (`ingest/inventory.py`): a flat list of hostnames or IPs, as one device per
+  line (`.txt`) or a YAML list (`.yaml`/`.yml`), with `#` comments. No groups, no per-device
+  variables, no credentials. YAML is read with `safe_load` only.
+- **Run-time credentials** (`ingest/credentials.py`): username, password and enable password
+  prompted for and held in memory for that run. Nothing is written to disk, and there is
+  deliberately no password option of any kind — argv is readable by every user on the host.
+- **Enable handling.** A device already in privileged mode is left alone, one that asks for
+  enable gets it, and one that asks for it when no enable password was given is skipped and
+  reported while the run continues — so a network where only some devices need enable takes
+  one run rather than two.
+- **The run report.** Every collection writes `nettopo-collect-report.csv` to the directory
+  the command was run from, with one row per inventory entry — including the devices that
+  were never reached. Written even when the run failed outright.
+- **Duplicate-hostname handling.** Two devices reporting the same name get their captures
+  suffixed with their inventory entry — both of them, so neither keeps the clean name by
+  arriving first — plus a warning and a `duplicate-hostname` report row. Note this does not
+  make the resulting diagram correct: the model is keyed by hostname and will still merge
+  them into one node. Only distinct hostnames fix that.
+- `utils/command_sections.format_command_section()`, the inverse of the capture splitter,
+  kept beside it so the two halves of the format cannot drift.
+- `utils/paths.resolve_input_root()` and `DEFAULT_CAPTURE_DIR`.
+- A `core-install` CI job that installs the package without the `collect` extra and proves
+  the whole diagram pipeline runs with no networking library present.
+
+### Changed
+
+- **Breaking-ish:** `-i`/`--input` is no longer required and defaults to `~/configs` on
+  every command. Nothing that worked before stops working — the flag is accepted exactly as
+  it was, and omitting it previously exited 2 rather than doing anything useful — but a bare
+  `nettopo all` now reads `~/configs` instead of printing usage.
+- **The zero-network guarantee is narrowed, and this is a security claim changing:** it was
+  "zero network connections", full stop. It is now "zero network connections in every
+  command except `collect`". The exemption is bounded rather than taken on trust — the
+  socket-denial test derives its command list from the command table itself so a new command
+  cannot inherit the guarantee unchecked, a second test proves importing the CLI pulls in
+  neither netmiko nor paramiko, and the `core-install` job proves the core package installs
+  without either.
+- `parsing.version._detect_os()` is now public as `detect_os()`; the collector must classify
+  a device before any template can be selected.
+- `export/csv_export._write_table()` and `._csv_safe()` are now public as `write_table()` and
+  `csv_safe()`, shared with the collection report so its device-reported `hostname` column
+  gets the same formula-injection guard.
+
 ## [0.7.0] - 2026-08-18
 
 Phase 7: `nettopo all` becomes real, and with it the zero-network guarantee covers the

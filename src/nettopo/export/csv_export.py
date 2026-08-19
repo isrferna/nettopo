@@ -90,7 +90,7 @@ def _write_devices(path: Path, model: NetworkModel) -> None:
         )
         for device in model.devices.values()
     ]
-    _write_table(path, header, rows)
+    write_table(path, header, rows)
 
 
 def _write_interfaces(path: Path, model: NetworkModel) -> None:
@@ -128,7 +128,7 @@ def _write_interfaces(path: Path, model: NetworkModel) -> None:
         for device in model.devices.values()
         for interface in device.interfaces.values()
     ]
-    _write_table(path, header, rows)
+    write_table(path, header, rows)
 
 
 def _write_neighbors(path: Path, model: NetworkModel) -> None:
@@ -155,7 +155,7 @@ def _write_neighbors(path: Path, model: NetworkModel) -> None:
         )
         for link in model.links
     ]
-    _write_table(path, header, rows)
+    write_table(path, header, rows)
 
 
 def _write_vlans(path: Path, model: NetworkModel) -> None:
@@ -164,7 +164,7 @@ def _write_vlans(path: Path, model: NetworkModel) -> None:
         (vlan.vlan_id, vlan.name, vlan.status)
         for vlan in sorted(model.vlans.values(), key=lambda vlan: vlan.vlan_id)
     ]
-    _write_table(path, header, rows)
+    write_table(path, header, rows)
 
 
 def _write_stp(path: Path, model: NetworkModel) -> None:
@@ -193,7 +193,7 @@ def _write_stp(path: Path, model: NetworkModel) -> None:
                         port.link_type,
                     )
                 )
-    _write_table(path, _STP_HEADER, rows)
+    write_table(path, _STP_HEADER, rows)
 
 
 def _write_hsrp(path: Path, model: NetworkModel) -> None:
@@ -213,7 +213,7 @@ def _write_hsrp(path: Path, model: NetworkModel) -> None:
                     member.preempt,
                 )
             )
-    _write_table(path, _HSRP_HEADER, rows)
+    write_table(path, _HSRP_HEADER, rows)
 
 
 def _write_bgp(path: Path, model: NetworkModel) -> None:
@@ -237,21 +237,32 @@ def _write_bgp(path: Path, model: NetworkModel) -> None:
         )
         for peer in sorted(model.bgp, key=lambda peer: (peer.local_device, peer.vrf, peer.peer_ip))
     ]
-    _write_table(path, _BGP_HEADER, rows)
+    write_table(path, _BGP_HEADER, rows)
 
 
-def _write_table(path: Path, header: tuple[str, ...], rows: Sequence[tuple[object, ...]]) -> None:
+def write_table(path: Path, header: tuple[str, ...], rows: Sequence[tuple[object, ...]]) -> None:
+    """Write one CSV table, neutralizing any cell a spreadsheet would run as a formula.
+
+    Public because `export/collect_report.py` writes a table too, and its rows carry a
+    device-reported hostname -- exactly the untrusted value `csv_safe` exists for. Sharing
+    the writer is what keeps that mitigation from having to be remembered twice.
+    """
     try:
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(header)
             for row in rows:
-                writer.writerow(_csv_safe(value) for value in row)
+                writer.writerow(csv_safe(value) for value in row)
     except OSError as exc:
         raise OSError(f"failed to write CSV table '{path}': {exc}") from exc
 
 
-def _csv_safe(value: object) -> str:
+def csv_safe(value: object) -> str:
+    """Neutralize a cell a spreadsheet would otherwise execute as a formula.
+
+    Public alongside `write_table` so a caller that has to format a row itself -- the
+    collect report writing to stdout -- applies the same guard rather than a forgotten one.
+    """
     text = "" if value is None else str(value)
     if text and text[0] in _FORMULA_PREFIXES:
         return "'" + text

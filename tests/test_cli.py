@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from nettopo.cli import build_parser, main
+from nettopo.utils.paths import DEFAULT_CAPTURE_DIR
 
 ALL_COMMANDS = {"parse", "l2", "stp", "hsrp", "bgp", "all"}
 
@@ -23,7 +24,7 @@ STP_PORT_CHANNEL = Path(__file__).parent / "fixtures" / "stp_portchannel"
 
 
 @pytest.mark.parametrize("command", sorted(ALL_COMMANDS))
-def test_every_subcommand_accepts_required_input_argument(command: str) -> None:
+def test_every_subcommand_accepts_an_input_argument(command: str) -> None:
     parser = build_parser()
     args = parser.parse_args([command, "-i", "."])
     assert args.command == command
@@ -36,11 +37,12 @@ def test_help_exits_cleanly() -> None:
     assert excinfo.value.code == 0
 
 
-def test_subcommand_requires_input_argument() -> None:
+@pytest.mark.parametrize("command", sorted(ALL_COMMANDS))
+def test_input_defaults_to_the_capture_directory(command: str) -> None:
+    """`-i` is optional so `nettopo collect` and `nettopo all` share one directory."""
     parser = build_parser()
-    with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["l2"])
-    assert excinfo.value.code == 2
+    args = parser.parse_args([command])
+    assert args.input == DEFAULT_CAPTURE_DIR
 
 
 def test_vlan_and_group_mode_are_mutually_exclusive() -> None:
