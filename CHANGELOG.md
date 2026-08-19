@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-18
+
 Phase 7: `nettopo all` becomes real, and with it the zero-network guarantee covers the
 whole tool in one run. Lucidchart support is dropped: draw.io is now the one tool these
 diagrams target.
