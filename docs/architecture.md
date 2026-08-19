@@ -32,7 +32,7 @@ flowchart LR
     ingest["ingest/<br/>DataSource, FileDataSource,<br/>model_builder.py"] --> model["model/<br/>NetworkModel, grouping fingerprints"]
     parsing["parsing/<br/>one parser per show command"] --> model
     views["views/<br/>l2, stp, hsrp, bgp"] --> model
-    render["render/<br/>drawio, icons, legend, lucidify"] --> views
+    render["render/<br/>drawio, icons, legend"] --> views
     render --> model
     export["export/<br/>csv_export"] --> views
     export --> model
@@ -51,7 +51,7 @@ flowchart LR
 | `parsing/` | One parser per `show` command. Returns plain dataclasses/lists — never touches `NetworkModel` directly. |
 | `model/` | `entities.py`: the normalized dataclasses and enums (`NetworkModel` and everything it contains). `grouping.py`: the STP fingerprint function that decides which VLANs render identically. `platforms.py`: the product-family table that turns a reported chassis into a `DeviceRole`. |
 | `views/` | One module per diagram (`l2`, `stp`, `hsrp`, `bgp`). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
-| `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key), `lucidify.py` (Lucidchart-import post-process). |
+| `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
 | `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (multi-command capture splitter), `paths.py` (filename sanitization / output-root resolution). |
 | `cli.py` | `argparse` setup and per-command orchestration only — no parsing or rendering logic lives here. |
@@ -94,7 +94,6 @@ sequenceDiagram
     participant GRP as "grouping.stp_fingerprint()"
     participant DIO as "render.drawio.render_diagram()"
     participant N2G as "N2G / igraph"
-    participant LUC as "render.lucidify.lucidify_xml()"
 
     User->>CLI: nettopo stp -i captures --all --group-mode topology
     CLI->>FDS: discover()
@@ -124,8 +123,6 @@ sequenceDiagram
         DIO->>N2G: add_node(style) / add_link(style) / layout(kk)
         Note over DIO: scales the layout until the closest<br/>two nodes have room for their labels
         N2G-->>DIO: draw.io XML
-        DIO->>LUC: lucidify_xml(xml)
-        LUC-->>DIO: import-friendly XML
         DIO-->>CLI: writes output/stp/stp_vlans-<ids>.drawio
     end
     CLI-->>User: "Rendered N STP diagram(s) to output/stp"
@@ -638,8 +635,8 @@ that module changes — `views/` and `model/` are unaffected because they depend
 neither N2G nor draw.io concepts. `render/icons.py` maps `DeviceRole` (plus `highlight`
 and `inferred` flags) to a draw.io style string and the geometry that style needs;
 `render/drawio.py` turns each `DiagramNode`/`DiagramLink` into an `add_node`/`add_link`
-call, applies N2G's igraph-backed `kk` layout, draws the legend, then hands the dumped XML
-to `lucidify.py` unless `--no-lucidify` was passed.
+call, applies N2G's igraph-backed `kk` layout, draws the legend, and writes the dumped XML
+straight out. Nothing post-processes it: draw.io is the only consumer these files target.
 
 ### Why the icons carry their own size, and why marks are fills rather than strokes
 
@@ -725,88 +722,67 @@ tree layout on a graph with two cycles in it — flattens the whole thing into r
 touching nodes. `kk` is also deterministic here, which keeps the committed example diagrams
 from churning every time they are regenerated.
 
-### The lucidify post-process
+### Why per-end link labels are left exactly as N2G writes them
 
 N2G emits each link's per-end interface label (`src_label`/`trgt_label`) as a child
 `mxCell` vertex of the link's own edge cell, positioned along it by a *relative* geometry
 (`x="-0.5"` near the source, `x="0.5"` near the target). That is the correct draw.io
-construct and `lucidify` leaves it alone. A vertex parented to an edge is that edge's
-label: it travels with the link when the link moves, and the Arrange layouts (Circle,
-Tree, Organic) skip it. Re-homing those labels onto the canvas as free-standing text cells
-— which this module did briefly — breaks exactly that: draw.io then reads each label as a
-*node*, and Arrange → Circle lays the labels out on the circle alongside the devices,
-scattering every label away from the link it describes.
+construct and nothing rewrites it. A vertex parented to an edge is that edge's label: it
+travels with the link when the link moves, and the Arrange layouts (Circle, Tree, Organic)
+skip it. Re-homing those labels onto the canvas as free-standing text cells — which an
+earlier post-process did — breaks exactly that: draw.io then reads each label as a *node*,
+and Arrange → Circle lays the labels out on the circle alongside the devices, scattering
+every label away from the link it describes.
 
 Keeping the two ends as separate labels is also what the STP view needs. Merging them into
 one centered string produces `Po110 designated/forwarding — Po110 root/forwarding`, which
 says nothing about which switch is which.
 
-What N2G gets wrong is the flag that declares the geometry relative. Its
-`drawio_link_label_xml` template is called with `rel="1"` for the source-end label but
-`rel="-1"` for the target-end one (`N2G_DrawIO.py` lines 380-404). draw.io tolerates it —
-mxGraph parses the attribute as a number and any non-zero value is truthy — but an importer
-that tests for the literal `"1"` sees a label with no relative positioning at all and drops
-it at the edge's origin. That is the likeliest explanation for the Lucid mangling this
-module was written for, so `lucidify` normalizes `relative` to `"1"` on every link end
-label. It also cleans up the doubled semicolons N2G's XML templates leave in style strings.
+Two cosmetic defects in N2G's output are left alone rather than cleaned up, because
+draw.io reads both correctly: it writes `relative="-1"` on the target-end label where the
+source end gets `relative="1"` (mxGraph parses the attribute as a number and any non-zero
+value is truthy), and its XML templates leave doubled semicolons in style strings. Both
+used to be normalized by a post-process that existed for one reason only — see below.
 
-```mermaid
-flowchart LR
-    subgraph before["N2G's raw output"]
-        E1["edge object cell"]
-        L1["child label cell<br/>x=-0.5, relative=1<br/>value: Gi1/0/1 (source end)"]
-        L2["child label cell<br/>x=0.5, <b>relative=-1</b><br/>value: Gi1/0/24 (target end)"]
-        E1 --- L1
-        E1 --- L2
-    end
-    before -- "lucidify_xml()" --> after
-    subgraph after["After lucidify (default; --no-lucidify skips this)"]
-        E2["edge object cell<br/>(unchanged)"]
-        M1["child label cell<br/>x=-0.5, relative=1"]
-        M2["child label cell<br/>x=0.5, <b>relative=1</b>"]
-        E2 --- M1
-        E2 --- M2
-    end
-```
+### Why there is no Lucidchart export
 
-Both labels stay children of their edge either way; only the flag changes. Applied to every
-generated diagram by default; `--no-lucidify` leaves N2G's raw output in place, including
-the `relative="-1"`.
+There was one: a `lucidify` post-process, applied by default and later behind a
+`--lucidify` flag, that rewrote the XML so Lucidchart could import it. It is gone, and the
+tool now targets draw.io alone. What the removal is based on, from a session of about
+forty test imports into a real Lucidchart account:
 
-### Known limitation: Cisco icons under Lucid import
+- Lucid's importer **rejects any file containing the legend** outright — "This file does
+  not appear to be a valid Draw.io XML file", no document created. Simplifying the legend's
+  styles, moving it, renaming its cell ids and wrapping its cells in `<object>` all still
+  fail; only deleting the whole block works.
+- It **ignores the `<object>` label** N2G writes hostnames into, so every device imports as
+  an unnamed box unless the name is duplicated onto the cell's own `value`.
+- It **draws none of the `mxgraph.cisco19.*` icons**, and embedded artwork is not a way
+  around that: `shape=image` with a data URI was tried as SVG and PNG, base64 and
+  percent-encoded, with and without the `;base64` marker, and every one imported without
+  error and then rendered as a broken-image placeholder or nothing.
+- It **does** map the classic `mxgraph.cisco.*` stencils to its own Cisco shapes — but
+  then ignores `fillColor`, `strokeColor`, `strokeWidth` and `opacity` on them, which is
+  how the STP view marks the root bridge and how uncaptured devices are faded.
+
+Supporting Lucid therefore meant giving up the legend, the Cisco icons or the marks that
+carry the views' meaning, in a file that then had to be produced and maintained separately
+from the one draw.io reads. That was not worth its weight. Anyone reviving this should
+know the above is what they are signing up for.
+
+### Known limitation: the Cisco icons are draw.io-only
 
 `render/icons.py` maps device roles to `mxgraph.cisco19.*` shapes, verified against the
 actual names in jgraph/drawio's `Sidebar-Cisco19.js` and then rendered through the draw.io
-CLI rather than guessed. Lucidchart uses a different shape library, so these may still
-degrade to plain boxes on import even with the correct names.
+CLI rather than guessed: a wrong stencil path renders as a blank shape rather than falling
+back to a box, so accuracy there matters more than it would elsewhere.
 
-**This got worse, deliberately.** The classic `mxgraph.cisco.*` stencils these replaced were
-named stencils an importer could at least look up; a cisco19 icon is drawn by a draw.io
-JavaScript shape (`mxgraph.cisco19.rect` plus a `prIcon` name), which nothing outside
-draw.io implements. The tradeoff was taken with that understood: draw.io is where these
-diagrams are read, edited and exported to PNG, and the visual gain there is large.
-`render/lucidify.py`'s label `relative` normalization (above) still gives the interface
-labels their best chance of surviving an import.
-
-**Status: implementation complete, live-import validation still pending.** Real
-fidelity against an actual Lucidchart import has not yet been checked by a human with
-Lucid access, since it requires interactive access this project's automation does not
-have. Everything the renderer emits should be treated as unvalidated there — including the
-root-bridge card fill, the `opacity` fade on uncaptured devices, and the legend, all of
-which are draw.io style overrides. Checklist for whoever runs this:
-
-1. Generate samples:
-   `nettopo l2 -i tests/fixtures/captures -o /tmp/lucid-check`
-   `nettopo stp -i tests/fixtures/stp_topology -o /tmp/lucid-check --all --group-mode topology`
-2. Import `/tmp/lucid-check/l2/l2_full.drawio` and one of
-   `/tmp/lucid-check/stp/*.drawio` into a Lucidchart document.
-3. Record, here in this section: whether the Cisco device shapes render recognizably or
-   degrade to plain boxes; whether the per-end link labels (e.g. `Gi1/0/1` at one end of
-   the link and `Gi1/0/24` at the other) survived the import and stayed attached to their
-   link; whether the root-bridge fill, the inferred-device fade and the
-   forwarding/blocking link colors survived; and whether the legend box arrived intact.
-   If the icons do degrade, the fallback worth costing is embedding SVG icons as
-   `shape=image;image=data:image/svg+xml;base64,…`, which any importer can render.
+**This is deliberately draw.io-specific.** The classic `mxgraph.cisco.*` stencils these
+replaced were named stencils another tool could look up; a cisco19 icon is drawn by a
+draw.io JavaScript shape (`mxgraph.cisco19.rect` plus a `prIcon` name), which nothing
+outside draw.io implements. The tradeoff was taken with that understood, and it is now
+simply what the tool targets: draw.io is where these diagrams are read, edited and
+exported to PNG, and the visual gain there is large.
 
 ## Security posture
 

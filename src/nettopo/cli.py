@@ -71,11 +71,6 @@ def _add_common_arguments(subparser: argparse.ArgumentParser) -> None:
             "cannot be detected from its capture (default: %(default)s)."
         ),
     )
-    subparser.add_argument(
-        "--no-lucidify",
-        action="store_true",
-        help="Skip the link-label post-process on generated draw.io files.",
-    )
 
 
 def _add_vlan_selection_arguments(
@@ -188,12 +183,11 @@ def _write_diagram(
     diagram: Diagram,
     output_path: Path,
     *,
-    apply_lucidify: bool,
     label: str,
     link_noun: str = "link",
 ) -> None:
     """Render one built diagram and report what it contained."""
-    render_diagram(diagram, output_path, apply_lucidify=apply_lucidify)
+    render_diagram(diagram, output_path)
     logger.info(
         "Rendered %s diagram (%d node(s), %d %s(s)) to %s",
         label,
@@ -244,7 +238,7 @@ def _run_l2(args: argparse.Namespace) -> int:
     try:
         output_root = resolve_output_root(args.output)
         output_path = output_root / "l2" / _l2_output_filename(args.endpoints, link_mode)
-        _write_diagram(diagram, output_path, apply_lucidify=not args.no_lucidify, label="L2")
+        _write_diagram(diagram, output_path, label="L2")
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
@@ -299,7 +293,7 @@ def _run_vlan_view(args: argparse.Namespace, view: _VlanDiagramView) -> int:
 
     try:
         output_root = resolve_output_root(args.output)
-        _render_vlan_groups(view, groups, output_root, apply_lucidify=not args.no_lucidify)
+        _render_vlan_groups(view, groups, output_root)
     except OSError as exc:
         logger.error("Failed to write output to '%s': %s", args.output, exc)
         return 1
@@ -311,13 +305,11 @@ def _render_vlan_groups(
     view: _VlanDiagramView,
     groups: list[VlanDiagramGroup],
     output_root: Path,
-    *,
-    apply_lucidify: bool,
 ) -> None:
     """Write one diagram per group into `output/<view>/`."""
     for group in groups:
         output_path = output_root / view.name / view.output_filename(group.vlan_ids)
-        render_diagram(group.diagram, output_path, apply_lucidify=apply_lucidify)
+        render_diagram(group.diagram, output_path)
         _log_vlan_diagram(view, group, output_path)
         if view.warn_about is not None:
             view.warn_about(group)
@@ -404,7 +396,6 @@ def _run_bgp(args: argparse.Namespace) -> int:
         _write_diagram(
             diagram,
             output_path,
-            apply_lucidify=not args.no_lucidify,
             label="BGP",
             link_noun="session",
         )
@@ -428,13 +419,12 @@ def _run_all(args: argparse.Namespace) -> int:
     if model is None:
         return 1
 
-    apply_lucidify = not args.no_lucidify
     try:
         output_root = resolve_output_root(args.output)
         csv_dir = write_csv_tables(model, output_root)
         logger.info("Parsed %d device(s); wrote CSV tables to %s", len(model.devices), csv_dir)
 
-        _render_all_l2_diagrams(model, output_root, apply_lucidify=apply_lucidify)
+        _render_all_l2_diagrams(model, output_root)
 
         for view, groups in (
             (_STP_VIEW, stp_view.build_groups(model, group_mode=GroupMode.PER_VLAN)),
@@ -443,14 +433,13 @@ def _run_all(args: argparse.Namespace) -> int:
             if not groups:
                 _warn_empty_view(view.label, f"output/{view.name}/")
                 continue
-            _render_vlan_groups(view, groups, output_root, apply_lucidify=apply_lucidify)
+            _render_vlan_groups(view, groups, output_root)
 
         bgp_diagram = bgp_view.build(model)
         if bgp_diagram.nodes:
             _write_diagram(
                 bgp_diagram,
                 output_root / "bgp" / _BGP_OUTPUT_FILENAME,
-                apply_lucidify=apply_lucidify,
                 label="BGP",
                 link_noun="session",
             )
@@ -464,9 +453,7 @@ def _run_all(args: argparse.Namespace) -> int:
     return 0
 
 
-def _render_all_l2_diagrams(
-    model: NetworkModel, output_root: Path, *, apply_lucidify: bool
-) -> None:
+def _render_all_l2_diagrams(model: NetworkModel, output_root: Path) -> None:
     """Write each of `all`'s L2 variants the captures hold adjacencies for.
 
     Emptiness is judged on links, not nodes: an L2 diagram is a drawing of adjacencies,
@@ -481,9 +468,7 @@ def _render_all_l2_diagrams(
         if not diagram.links:
             _warn_empty_view("L2 neighbor", f"output/l2/{filename}")
             continue
-        _write_diagram(
-            diagram, output_root / "l2" / filename, apply_lucidify=apply_lucidify, label="L2"
-        )
+        _write_diagram(diagram, output_root / "l2" / filename, label="L2")
 
 
 _COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
