@@ -77,7 +77,7 @@ release is published to PyPI by `.github/workflows/publish.yml` when a `v*` tag 
 pushed. To install from source for development:
 
 ```bash
-git clone https://github.com/isrferna/nettopo.git
+git clone https://github.com/netcraftworks/nettopo.git
 cd nettopo
 pip install -e ".[dev,collect]"
 ```
