@@ -100,6 +100,7 @@ nettopo/
 │       │   └── model_builder.py  # ingestion -> parsers -> NetworkModel population
 │       ├── parsing/           # one parser per show command (TextFSM/ntc-templates)
 │       │   ├── __init__.py
+│       │   ├── _textfsm.py    # typed wrapper over ntc_templates; the one untyped boundary
 │       │   ├── cdp.py
 │       │   ├── lldp.py
 │       │   ├── spanning_tree.py
@@ -116,6 +117,7 @@ nettopo/
 │       │   └── platforms.py   # platform string -> DeviceRole
 │       ├── views/             # one module per diagram view; consumes the model
 │       │   ├── __init__.py
+│       │   ├── diagram.py     # Diagram/DiagramNode/DiagramLink every view returns
 │       │   ├── l2.py
 │       │   ├── stp.py
 │       │   ├── hsrp.py
