@@ -15,7 +15,16 @@ Four diagram views are produced from the same parsed data model:
 
 ## Status
 
-**Phase 6 — BGP.** `nettopo bgp -i <dir>` now renders the BGP session graph: one diagram
+**Phase 8 — live collection.** `nettopo collect --inventory <file>` now gathers the
+captures itself, over SSH, instead of waiting for someone to save them by hand. It asks for
+the credentials on the terminal, sends nothing but `show` commands, and writes one file per
+device named after that device's own hostname — into `~/configs`, which is also where every
+other command now looks by default, so `nettopo collect --inventory devices.txt && nettopo all`
+is the whole workflow. The SSH backend is an optional extra
+(`pip install 'nettopo[collect]'`); a core install still has no networking library in it at
+all.
+
+**Phase 6 — BGP.** `nettopo bgp -i <dir>` renders the BGP session graph: one diagram
 for the whole network, with each captured router labeled by its AS number and BGP router
 ID, each session labeled with its state and colored blue for iBGP or purple for eBGP, and
 any peer no capture covers drawn faded and labeled by the address and AS the session named
@@ -51,6 +60,17 @@ open issues for the phased build-out.
 pip install nettopo
 ```
 
+That is everything except live collection. To also collect captures from devices over SSH:
+
+```bash
+pip install 'nettopo[collect]'
+```
+
+The extra pulls in netmiko and PyYAML. Keeping them optional is deliberate rather than
+tidy-mindedness: without the extra there is no networking library present in the
+environment at all, which is what makes the zero-network guarantee below true by
+construction rather than by discipline.
+
 Pre-releases (`0.3.0rc1` and the like) are published from the same pipeline but `pip`
 skips them unless asked: `pip install --pre nettopo`, or pin the exact version. Each
 release is published to PyPI by `.github/workflows/publish.yml` when a `v*` tag is
@@ -59,7 +79,7 @@ pushed. To install from source for development:
 ```bash
 git clone https://github.com/isrferna/nettopo.git
 cd nettopo
-pip install -e ".[dev]"
+pip install -e ".[dev,collect]"
 ```
 
 Requires Python 3.11+.
@@ -268,7 +288,13 @@ creating it if needed. `parse`, `l2`, `stp`, `hsrp` and `bgp` each produce one p
 that output; [`all`](#nettopo-all) produces all of it in one run.
 
 That input directory defaults to `~/configs`, so once your captures live there you can
-drop `-i` entirely and just run `nettopo all`.
+drop `-i` entirely and just run `nettopo all`. [`collect`](#nettopo-collect) is the command
+that puts them there, gathering them from the devices over SSH:
+
+```bash
+nettopo collect --inventory devices.txt   # devices -> ~/configs
+nettopo all                               # ~/configs -> ./output
+```
 
 ### Global options
 
@@ -531,7 +557,175 @@ than once per command as running them in sequence would. `all` drives the same v
 individual commands do, not a second implementation of them: every file it writes is
 byte-identical to what the corresponding command would have produced.
 
+### `nettopo collect`
+
+Gathers the captures from the devices themselves, over SSH, so the other commands have
+something to read. Requires the optional extra: `pip install 'nettopo[collect]'`.
+
+```bash
+nettopo collect --inventory devices.txt
+```
+
+It asks for the credentials, works through the inventory one device at a time, and writes
+one capture file per device into `~/configs`. Then `nettopo all` turns those into diagrams.
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `-I`, `--inventory` | file path | *(required)* | The devices to collect from. See [Inventory](#inventory) below. |
+| `-o`, `--output` | directory path | `~/configs` | Where the capture files go — the same directory the other commands read by default. |
+| `--report` | file path or `-` | `nettopo-collect-report.csv` | Where the run report goes, relative to the directory you ran the command from. `-` writes it to stdout. |
+| `-u`, `--user` | username | *(prompted)* | SSH username. There is deliberately no password option; see [Credentials](#credentials). |
+| `--port` | port number | `22` | SSH port. |
+| `--timeout` | seconds | `30` | Wait for the connection, banner and authentication. |
+| `--command-timeout` | seconds | `120` | Wait for one command's output. Raise it for a large `show interfaces` on a busy chassis. |
+| `--host-key-checking` | `strict`, `none` | `strict` | Whether a device's SSH host key must already be known. See [Host keys](#host-keys). |
+
+#### Inventory
+
+A flat list of devices, each named by hostname or IP. One device per line:
+
+```
+# devices.txt
+sw-core
+rtr-edge
+172.12.25.21          # the access stack's management address
+sw-access-01
+```
+
+Or the same list as YAML, if `.yaml`/`.yml` suits your tooling better:
+
+```yaml
+- sw-core
+- rtr-edge
+- 172.12.25.21
+- sw-access-01
+```
+
+That is the whole format. There are no groups, no per-device variables and no credentials
+in it — which is exactly why it needs no encryption, and why it is not an Ansible
+inventory even though it looks like the simplest kind of one. A `- sw-core: {ansible_host: ...}`
+mapping is refused with a message saying so rather than silently ignored.
+
+#### Credentials
+
+Username, password and enable password are asked for on the terminal at the start of the
+run, held in memory for that run, and **never written anywhere** — no vault, no credential
+file, no cache.
+
+There is no `--password` and no `--enable-password` option, and this is a deliberate
+omission rather than a gap: anything on the command line is visible to every user on the
+host through `ps`. For the same reason `collect` refuses to run without a terminal instead
+of letting `getpass` fall back to an echoing prompt.
+
+**Enable.** The prompt for the enable password says it may be left empty. Per device: one
+that logs straight into privileged mode is left alone, one that asks for enable gets it,
+and one that asks for it when you gave no enable password is **skipped** — reported and
+recorded in the report, with the run continuing to the next device. That way a network
+where only some devices need enable takes one run, not two.
+
+#### What it sends, and what it does not
+
+Collection is read-only. Every command is matched against `^show ` immediately before it is
+written to the session, so a future edit to the command tables cannot ship a `clear counters`
+by accident. The commands are a fixed list of literals; nothing from the inventory or from
+a device's own output is ever built into a command.
+
+| Platform | Commands |
+|---|---|
+| IOS / IOS-XE | `show version`, `show cdp neighbors detail`, `show lldp neighbors detail`, `show ip interface brief`, `show interfaces`, `show vlan brief`, `show spanning-tree`, `show standby brief`, `show etherchannel summary`, `show ip bgp summary` |
+| NX-OS | the same, except `show port-channel summary` replaces `show etherchannel summary`, and `show standby brief` is dropped |
+
+The platform is detected from each device's own `show version`, which is sent first — so a
+mixed IOS/NX-OS network needs no flags and no separate runs. NX-OS drops `show standby brief`
+because it spells that command `show hsrp brief`, for which nettopo has no parser; collecting
+it would only add a section nothing reads.
+
+A command the device rejects (`% Invalid input`, `% BGP not active`) is skipped and the
+device carries on. A switch with no BGP configured is a healthy device answering correctly,
+not a failed run. The report's `commands` column shows how many sections each device
+actually yielded, so a thin capture is visible rather than silent.
+
+> **One honest caveat.** netmiko sends `terminal length 0` and `terminal width 511` when it
+> establishes the session, and `exit` when it closes it. Those are not `show` commands.
+> They are session-local, change no configuration and no counters, and disabling paging is
+> unavoidable for CLI scraping — but "only `show` commands are sent" would not be strictly
+> true without saying so. No netmiko write API (`send_config_set`, `save_config`) is ever
+> called.
+
+#### When something goes wrong
+
+Collection is **serial**, one device at a time, and **stops at the first error** — an
+unreachable device, a timeout, a rejected password, a rejected enable secret. Whatever went
+wrong is reported along with the device it happened on, the captures already collected stay
+on disk, the report is written, and the command exits `1`.
+
+The one exception is the missing-enable case above, which is skipped rather than fatal.
+
+Stopping is what bounds the damage of a mistyped password to **one** failed authentication
+attempt. One wrong password against two hundred devices is an account lockout, and on a
+TACACS-backed network that locks you out of everything, not just nettopo. It is also why
+collection is not parallel: with five workers in flight, five devices would present the bad
+password before the first rejection came back. nettopo never retries an authentication and
+never re-prompts mid-run, for the same reason.
+
+The trade is real and worth knowing about: one decommissioned device left in the inventory
+will stop every run until you take it out.
+
+#### The run report
+
+Every run writes a CSV to the directory you ran it from — `nettopo-collect-report.csv` unless
+`--report` says otherwise. It has one row per **inventory entry**, so a device that was never
+reached is as visible as one that was collected, and it is written even when the run failed
+outright.
+
+| Column | Meaning |
+|---|---|
+| `target` | The entry exactly as it appears in the inventory. |
+| `hostname` | The name the device reported. Empty if it never answered. |
+| `status` | `ok`; `duplicate-hostname`; `no-enable` (skipped, run continued); `failed` (this device stopped the run); `skipped` (never contacted, because an earlier device stopped the run). |
+| `platform` | The detected platform, `cisco_ios` or `cisco_nxos`. |
+| `commands` | How many command sections the device actually yielded. |
+| `capture_file` | Where its capture was written. |
+| `detail` | Why it failed, or which device it shares a hostname with. |
+
+#### Duplicate hostnames
+
+Capture files are named after the device's own hostname — from its `show version`, falling
+back to its prompt — rather than the inventory entry, which is why an inventory of bare IPs
+still produces `sw-core.txt`. That is the same name the model will use, so the file is named
+after the node the diagram will draw. When two devices report the same
+name (both still called `switch`, say), **both** files are suffixed with their inventory
+entry — `switch_10.0.0.11.txt` and `switch_10.0.0.12.txt` — so neither overwrites the other
+and neither keeps the clean name by the accident of being collected first.
+
+> **This does not make the diagram right.** nettopo's model is keyed by hostname, so a later
+> `nettopo all` will still merge two identically-named devices into a single node carrying
+> both of their links. Distinct filenames cannot prevent that; only distinct hostnames can.
+> `collect` warns loudly and marks both rows `duplicate-hostname` precisely because at
+> collection time it can see what the model never will — that these are two different boxes
+> at two different addresses.
+
+#### Host keys
+
+`collect` defaults to **strict** host key checking: a device's SSH host key must already be
+in your `known_hosts`. netmiko's own default is to accept an unknown key silently, which is
+not a reasonable default for a tool whose purpose is typing device credentials into a
+socket — a machine impersonating a switch at first contact collects a working login and an
+enable secret in one exchange.
+
+The cost is a first run against devices you have never reached from this host. Populate
+`known_hosts` deliberately:
+
+```bash
+ssh-keyscan -H sw-core rtr-edge 172.12.25.21 >> ~/.ssh/known_hosts
+```
+
+`--host-key-checking none` accepts any key and warns on every invocation. Labs only.
+
 ### Preparing captures
+
+These are the files [`nettopo collect`](#nettopo-collect) produces, in exactly this
+format — this section is for when you are saving them by hand instead.
 
 The `-i`/`--input` directory holds one text file per device. Each file concatenates the
 outputs of several `show` commands, each preceded by that device's prompt line
@@ -642,9 +836,25 @@ workflow and coding conventions.
 
 ## Security
 
-This tool makes **zero network connections** by design — it only reads local capture
-files. See [`PROJECT_SPEC.md`](PROJECT_SPEC.md#11-security-review-owasp-adapted) for the
-full OWASP-adapted security review.
+Every command except [`collect`](#nettopo-collect) makes **zero network connections** by
+design — they only read local capture files. `collect` is the one command that opens a
+socket, and only to the devices its inventory names.
+
+That boundary is enforced rather than asserted. `tests/test_no_network.py` monkeypatches
+`socket.socket` to fail and runs every other command end to end, deriving the list from the
+command table itself so a command added later cannot inherit the guarantee without being
+checked against it; a second test proves that importing nettopo pulls in neither netmiko nor
+paramiko; and a dedicated CI job installs the package without the `collect` extra and
+confirms the whole diagram pipeline runs with no networking library present.
+
+For `collect` specifically: it sends nothing but `show` commands (checked at the moment of
+sending, not just documented), accepts no password on the command line because argv is
+readable by every user on the host, stores no credential anywhere, requires a device's SSH
+host key to be known unless you opt out, and stops at the first error so a mistyped password
+costs exactly one failed authentication attempt rather than a fleet-wide account lockout.
+
+See [`PROJECT_SPEC.md`](PROJECT_SPEC.md#11-security-review-owasp-adapted) for the full
+OWASP-adapted security review.
 
 ## License
 

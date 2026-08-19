@@ -7,7 +7,7 @@ rule in [`CLAUDE.md`](../CLAUDE.md). For scope, the full data model, and the CLI
 reference, see [`PROJECT_SPEC.md`](../PROJECT_SPEC.md); for user-facing command/option
 docs, see the [README](../README.md#usage).
 
-## Current state (Phase 7)
+## Current state (Phase 8)
 
 | Command | Status | Reads | Writes |
 |---|---|---|---|
@@ -53,6 +53,7 @@ flowchart LR
 | `views/` | One module per diagram (`l2`, `stp`, `hsrp`, `bgp`). Reads the model, returns a render-ready `views/diagram.py` `Diagram`. Never parses text or writes files. `diagram.py` also holds what the two per-VLAN views share: the `VlanDiagramGroup` they return and the `vlan_diagram_filename()` both output names are built from. |
 | `render/` | `drawio.py` (the only module importing N2G), `icons.py` (`DeviceRole` → Cisco icon, plus the palette and link styles), `legend.py` (the diagram's key). |
 | `export/` | `csv_export.py`: one CSV table per model entity. |
+| `ingest/` | Data sources. `files.py` reads a capture directory and writes one; `inventory.py` reads the device list `collect` works from; `credentials.py` prompts for one run's credentials; `live.py` collects over SSH and is the only module that imports netmiko. |
 | `utils/` | Dependency-free shared services: `interfaces.py` (interface-name normalizer), `hostnames.py` (device-name normalizer), `command_sections.py` (the multi-command capture format, read and write), `paths.py` (the shared capture-directory default, path resolution, filename sanitization). |
 | `cli.py` | `argparse` setup and per-command orchestration only — no parsing or rendering logic lives here. |
 
@@ -165,6 +166,83 @@ reading a directory of saved captures. v1 ships file-based ingestion only (see
 `PROJECT_SPEC.md` section 2, "out of scope"), but the interface exists now so that a
 future live-collection source (netmiko/scrapli over SSH) can be added by implementing
 the same interface, without touching `parsing/`, `model/`, or `views/`.
+
+### Why live collection is a `DataSource` and not a second pipeline
+
+`ingest/base.py` defined `DataSource` in Phase 0 with exactly one live source in mind, and
+`Capture.platform_hint` existed from the start for a producer that knows each device's
+platform — something a directory of files can only guess at with one global default. Phase 8
+spent that design: `LiveDataSource` yields `Capture` objects and every layer downstream —
+parsing, the model, the views, the renderers — is unchanged and unaware. The highest-value
+test in the collector's suite is the one that proves it, asserting through
+`build_network_model()` rather than on the collected text.
+
+`collect` deliberately stops at writing files rather than chaining into the diagram
+pipeline. Collection and drawing fail in unrelated ways and on unrelated timescales — one
+takes minutes and depends on the network, the other takes a second and depends on the
+captures — and keeping them separate means a collection can be re-drawn without being
+re-run, and diffed against the last one.
+
+### Why collection is serial, and stops at the first error
+
+Not an oversight, and not a placeholder for a thread pool. netmiko is blocking socket I/O
+that releases the GIL, so threads would genuinely help; the reason not to have them is that
+serial execution buys something concurrency cannot.
+
+A mistyped password must never be presented to a whole fleet: one wrong password across two
+hundred devices is an account lockout, and on a TACACS-backed network it locks the operator
+out of everything, not just nettopo. Because only one device is ever in flight and the run
+stops at the first error, a wrong credential costs **exactly one** failed authentication
+attempt. With five workers, five devices would present the bad password before the first
+rejection came back — so a concurrent collector would need a serial pre-flight probe bolted
+on to reach the same guarantee, which is most of the way back to being serial anyway.
+
+Stopping at the first error is the same instinct applied more broadly: in a first phase,
+whatever goes wrong should affect one switch rather than cascade. The cost is real and
+worth naming — one decommissioned device left in an inventory stops every run until it is
+removed — and if that becomes intolerable the fix is a `--continue-on-error` flag that
+pointedly does *not* extend to authentication failures, since that exemption is the whole
+protection.
+
+Two things are deliberately **not** errors, because treating them as such would stop any
+real collection from finishing. A command the platform rejects (`% BGP not active`) is a
+healthy device answering correctly, and every parser already treats a missing command as
+ordinary input. A duplicate hostname is a configuration observation, not a collection
+failure. And one thing is deliberately not fatal: a device that needs enable when no enable
+password was given is skipped, because that fact is about what the operator typed at the
+prompt, not about the network — which is why `EnableRequired` must be caught *before* the
+broad handler, and why a test asserts that ordering directly.
+
+### Why duplicate hostnames are surfaced rather than solved
+
+Two switches both still called `switch` are two problems, and the dangerous one is not the
+obvious one.
+
+The filename collision is `collect`'s, and it is easy: the writer keeps a hostname registry
+for the run, and the moment a second device claims a name it suffixes **both** files with
+their inventory target. Both, not just the newcomer — arriving first is not a reason to keep
+the clean name.
+
+The name it registers is the *parsed* `show version` hostname, not the prompt, because that
+is the key `model_builder` merges on. The two normally agree — both come from the configured
+hostname — but keying the warning on the prompt would quietly miss a real collision whenever
+they diverged, and would name capture files after something other than the node the diagram
+ends up drawing.
+
+The second problem is older and deeper. `ingest/model_builder.py` keys `model.devices` by
+hostname, so two source devices called `switch` merge into one `Device`: their interfaces
+update into one dict, their STP bridges and HSRP members overwrite each other, and every
+link discovered from either box emanates from a single node. Distinct filenames do not help
+— the merge happens on the reported hostname. This is reachable today with hand-saved
+captures too; `collect` merely makes it far likelier, since collecting a fleet of
+factory-default names is exactly the scenario. Fixing it properly means keying the model by
+something stronger than a hostname, which touches the model, `utils/hostnames.py`, every
+view and the CSV exports — its own issue, not something to smuggle into this one.
+
+So `collect` does the honest thing it *can* do: it detects the condition and refuses to let
+it pass quietly, warning that a diagram built from these captures will merge the devices
+until the hostnames differ. At collection time it knows what the model never will — that
+these are two different boxes at two different addresses.
 
 ### Why the capture format has a writer, not just a reader
 
@@ -836,10 +914,14 @@ like `../../etc`) escaping the output directory; today's real output filenames d
 yet need them in practice — `l2`'s filenames are a fixed lookup table, and `stp`'s
 and `hsrp`'s come from the same `vlan_diagram_filename()` over VLAN ids, which are ints
 parsed out of the model rather than arbitrary path input, so they can't contain a path
-separator — but the helpers are unit-tested
-(`tests/test_paths.py`) and ready for the day a filename is built from a raw string like
-a hostname. `export/csv_export.py` separately neutralizes *cell* values that start with
+separator. `collect` is the caller they were written for and, until Phase 8, did not have:
+`ingest/files.CaptureWriter` names each capture after the device's own prompt line, which is
+a raw string the device controls. Two layers apply there — the prompt regex accepts only a
+bare hostname, so a prompt containing a path separator is not treated as a name at all, and
+`safe_join()` catches what that regex does allow (a name of nothing but dots). `export/csv_export.py` separately neutralizes *cell* values that start with
 a formula-triggering character (`=`, `+`, `-`, `@`) so a hostname or description can't
-execute as a formula when the CSV is opened in spreadsheet software — a different attack
+execute as a formula when the CSV is opened in spreadsheet software — a guard the
+collection report shares by reusing the same table writer, since its `hostname` column comes
+off a device prompt — a different attack
 surface (CSV formula injection) from filename path traversal. See `PROJECT_SPEC.md`
 section 11 for the full OWASP-adapted security review.

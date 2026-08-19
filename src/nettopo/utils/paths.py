@@ -17,6 +17,10 @@ _UNSAFE_CHARS = re.compile(r"[\\/:*?\"<>|\s]+")
 # here, so the two halves of the workflow line up without the user naming a path twice.
 DEFAULT_CAPTURE_DIR = "~/configs"
 
+# The collection report goes to the directory the command was run from, not to the capture
+# directory: it is a record of that run, not part of the capture set.
+DEFAULT_REPORT_NAME = "nettopo-collect-report.csv"
+
 
 def sanitize_filename_component(value: str, *, fallback: str = "unknown") -> str:
     """Reduce `value` to characters safe for use as a single path segment.

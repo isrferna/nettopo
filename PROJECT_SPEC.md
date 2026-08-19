@@ -44,6 +44,9 @@ returns 404). No rename needed for the v0.1.0 release.
 ### In scope (v1)
 
 - Read-only ingestion of `show` command outputs from a local directory.
+- **Live collection over SSH** (`nettopo collect`): read-only, serial, credentials prompted
+  for at run time and never stored, one capture file per device plus a CSV report of the
+  run. Ships as an optional `collect` extra so a core install carries no networking library.
 - TextFSM parsing via **`ntc-templates`** (no ad-hoc regex parsers for production paths).
 - A normalized in-memory **data model** (dataclasses).
 - Four views: L2, STP, HSRP, BGP.
@@ -56,8 +59,14 @@ returns 404). No rename needed for the v0.1.0 release.
 
 ### Explicitly out of scope (v1) — YAGNI
 
-- Live collection over SSH (netmiko/scrapli). The ingestion layer is designed as an
-  interface so this can be added later, but no networking code ships in v1.
+- Storing credentials in any form: no vault, no credential file, no cache, and no
+  password accepted on the command line. `collect` prompts and forgets. This is what keeps
+  the inventory a file with nothing sensitive in it.
+- Ansible-style inventories: groups, per-device variables, `group_vars/`, host ranges,
+  dynamic inventory scripts, jump hosts. The inventory is a flat list of hostnames or IPs.
+- Concurrent collection. `collect` is serial on purpose (see §11): it bounds a mistyped
+  password to one failed authentication attempt, which no concurrent design can promise.
+- scrapli, and any transport other than SSH.
 - Nexus vPC domain/peer-link modeling. MLAG is **only** port-channel member grouping,
   matching what N2G does today.
 - BGP route tables, policies, communities, route-reflector modeling. v1 is the
@@ -69,7 +78,9 @@ returns 404). No rename needed for the v0.1.0 release.
   the drawing, not of the model, and it writes nothing back (see §7).
 - Any Lucidchart support. draw.io is the one tool these diagrams target — see
   `docs/architecture.md` for what a Lucid import does to a generated file.
-- Any telemetry or network egress. The tool must make **zero** network connections (see §11).
+- Any telemetry or network egress. Every command except `collect` must make **zero**
+  network connections, and `collect` connects only to the devices its inventory names
+  (see §11).
 
 ---
 
@@ -93,10 +104,13 @@ nettopo/
 │   └── nettopo/
 │       ├── __init__.py
 │       ├── cli.py             # CLI entry point (argument parsing, orchestration only)
-│       ├── ingest/            # data sources (file reader now; live later)
+│       ├── ingest/            # data sources: a capture directory, or live devices
 │       │   ├── __init__.py
 │       │   ├── base.py        # DataSource interface
-│       │   ├── files.py       # FileDataSource: read a directory of device captures
+│       │   ├── files.py       # FileDataSource + CaptureWriter: the capture dir, both ways
+│       │   ├── inventory.py   # the device list `collect` works from (.txt / .yaml / .yml)
+│       │   ├── credentials.py # prompts for one run's credentials; stores nothing
+│       │   ├── live.py        # LiveDataSource: SSH collection. The only netmiko importer
 │       │   └── model_builder.py  # ingestion -> parsers -> NetworkModel population
 │       ├── parsing/           # one parser per show command (TextFSM/ntc-templates)
 │       │   ├── __init__.py
@@ -153,7 +167,7 @@ imports `render`, `views`, or N2G.
 
 ---
 
-## 4. Ingestion (v1: files only)
+## 4. Ingestion
 
 Input is a **directory**. Each file is one device's captured output containing several
 `show` commands concatenated, each preceded by its device prompt line
@@ -166,8 +180,36 @@ Input is a **directory**. Each file is one device's captured output containing s
   when present; otherwise fall back to a CLI `--platform` default (`cisco_ios`).
   ntc-templates needs the platform to select the right template.
 - **Interface:** `ingest/base.py` defines `DataSource` with a method that yields
-  `(device_hint, raw_text, platform_hint)`. `FileDataSource` implements it over a directory.
-  A future `LiveDataSource` can implement the same interface without touching parsing/model.
+  `(device_hint, raw_text, platform_hint)`. `FileDataSource` implements it over a directory
+  and `LiveDataSource` over SSH, so nothing downstream of ingestion knows or cares which one
+  produced a capture.
+
+### Live collection (`ingest/live.py`)
+
+Collects the same command set over SSH and renders it in the same on-disk format, so the
+rest of the pipeline is unchanged.
+
+- **Format:** netmiko's `send_command` strips the echoed command and the trailing prompt,
+  so the collector synthesizes the `hostname#command` line itself via
+  `utils/command_sections.format_command_section()` — the inverse of the splitter, kept in
+  the same module so the two cannot drift.
+- **Identity:** decided the same way `model_builder` decides it — the parsed `show version`
+  hostname, falling back to the device's prompt (`find_prompt()`), falling back to the
+  inventory entry. Deriving it identically rather than in parallel matters twice over: the
+  capture file is named after the node the diagram will draw, and duplicate detection keys
+  on the name that actually causes a merge. A prompt in any other mode (`sw1(config)#`) is
+  not a device name and is skipped in that chain, though the prompt lines inside the capture
+  still record verbatim what the device showed.
+- **Platform:** `show version` is sent first and `parsing.version.detect_os()` chooses the
+  rest of the command set, which reaches the model as `Capture.platform_hint` — the field's
+  reason for existing. IOS-XE maps to `cisco_ios`: ntc-templates ships no `cisco_xe`
+  platform, so that netmiko-only string must never reach a template lookup.
+- **Command set:** NX-OS differs in exactly two places — `show port-channel summary`
+  replaces the etherchannel form, and `show standby brief` is dropped because NX-OS spells
+  it `show hsrp brief`, for which there is no template and no parser.
+- **Inventory:** a flat list of hostnames or IPs, as one device per line or a YAML list.
+  No groups, no variables, no credentials — see §2.
+- **Failure policy and credentials:** see §11.
 
 **Command set consumed (v1):**
 
@@ -562,6 +604,16 @@ parsing vs rendering). One table per entity: `devices.csv`, `interfaces.csv`,
 `neighbors.csv`, `vlans.csv`, `stp.csv`, `hsrp.csv`, `bgp.csv`. STP CSV includes both base
 and effective priority.
 
+### The collection report — `export/collect_report.py`
+
+`collect` writes one more CSV, and it is not part of the output tree above: it goes to the
+directory the command was run from, because it records a *run* rather than describing the
+network. One row per inventory entry — `target`, `hostname`, `status`, `platform`,
+`commands`, `capture_file`, `detail` — so a device that was never reached is as visible as
+one that was collected, and it is written even when the run failed outright. It shares
+`csv_export`'s table writer, and therefore its formula-injection guard: the `hostname`
+column comes off a device prompt.
+
 ### Output tree
 
 ```
@@ -606,6 +658,7 @@ nettopo stp     -i ./captures [--vlan N | --group-mode per-vlan|strict|topology]
 nettopo hsrp    -i ./captures [--vlan N] [--all]
 nettopo bgp     -i ./captures
 nettopo all     -i ./captures                      # every view + every CSV
+nettopo collect -I ./devices.txt                   # devices -> capture files + a run report
 ```
 
 - `--link-mode` default is `physical`; `port-channel` writes a `_port-channels`-suffixed
@@ -613,6 +666,12 @@ nettopo all     -i ./captures                      # every view + every CSV
 - `--vlan N` restricts to one VLAN (single diagram); mutually exclusive with `--group-mode`.
 - `--group-mode` is `stp`-only and defaults to `per-vlan`; `hsrp` rejects it (see §6).
 - `--all` for `stp`/`hsrp` writes every resulting diagram into `output/<view>/`.
+- `collect` shares none of the common options: the others read a capture directory, it
+  writes one. Its `-o/--output` therefore defaults to the same `~/configs`, and it adds
+  `-I/--inventory` (required), `--report` (default `nettopo-collect-report.csv`, written to
+  the working directory, `-` for stdout), `-u/--user`, `--port`, `--timeout`,
+  `--command-timeout` and `--host-key-checking` (default `strict`). There is deliberately
+  no password option of any kind — see §11.
 - `all` takes the common options only. It runs the per-VLAN views over every VLAN with
   `--group-mode per-vlan`, and writes the three L2 diagrams of the §8 output tree
   (physical, port-channels, network-only). A view the captures hold no data for is skipped
@@ -625,6 +684,12 @@ nettopo all     -i ./captures                      # every view + every CSV
 
 **Runtime:** `n2g`, `textfsm`, `ntc-templates`, `python-igraph`.
 
+**Optional `collect` extra:** `netmiko`, `PyYAML`. Kept out of the core install on purpose:
+with no extra installed there is no networking library in the environment at all, which is
+what makes the guarantee in §11 true by construction rather than by discipline. `cli.py`
+imports them lazily inside the `collect` handler, so `import nettopo.cli` neither reaches
+them nor requires them, and a CI job installs the core alone to prove it.
+
 > **Do NOT depend on or install Flask/Werkzeug.** N2G's optional V3D viewer imports Flask
 > at module load; with Flask present but an incompatible Werkzeug on Python 3.12, that
 > import poisons the startup of **every** N2G command (`ast.Str` / `NameError: app`).
@@ -632,7 +697,7 @@ nettopo all     -i ./captures                      # every view + every CSV
 > need arises, isolate it in a separate optional extra and a separate Python 3.11 venv.
 
 **Dev:** `pytest`, `pytest-cov`, `ruff` (lint + format), `mypy` (type checking),
-`build`/`twine` (packaging). Pin versions in `pyproject.toml`.
+`build`/`twine` (packaging), `types-PyYAML`. Pin versions in `pyproject.toml`.
 
 Target Python: **3.11+** (dataclasses with `X | None`, modern typing).
 
@@ -640,27 +705,78 @@ Target Python: **3.11+** (dataclasses with `X | None`, modern typing).
 
 ## 11. Security review (OWASP-adapted)
 
-Per `CLAUDE.md`, every change is checked against OWASP Top 10 (2021). For a local,
-file-reading CLI the relevant items are:
+Per `CLAUDE.md`, every change is checked against OWASP Top 10 (2021). For a CLI that reads
+local files and, in `collect` alone, connects to network devices, the relevant items are:
 
 - **A03 Injection** — parsing is done by the TextFSM engine over template **data**;
   never `eval`/`exec`/`os.system` on parsed content or filenames. CLI parsing via the
   standard argument parser.
-- **A08 Software & Data Integrity** — no `pickle`, no `yaml.load` (use `safe_load` if YAML
-  is ever added). TextFSM templates come from the installed `ntc-templates` package, not
-  from user-supplied executable code.
+- **A08 Software & Data Integrity** — no `pickle`, no `yaml.load`: the YAML inventory is
+  read with `safe_load` only, so an inventory cannot construct arbitrary Python objects.
+  TextFSM templates come from the installed `ntc-templates` package, not from
+  user-supplied executable code.
 - **Path handling (traversal)** — validate and normalize `--input`/`--output`. Output
   filenames are derived from hostnames and VLAN ids: **sanitize** them (strip path
   separators, quotes, whitespace) so a device named `../../etc` can't escape the output
   directory. Refuse to write outside the resolved output root.
 - **Sensitive data** — inputs contain hostnames, management IPs, and topology. The tool
-  must not transmit them anywhere. **Hard requirement: zero network connections in v1.**
-  This is enforced by a test (`tests/test_no_network.py`) that monkeypatches
-  `socket.socket` to fail and asserts a full `all` run still succeeds — proving no code path
-  opens a socket. This is a verifiable guarantee, not a promise in prose.
-- **A10 SSRF** — not applicable in v1 (no server-side fetch). Becomes relevant only when
-  live collection is added; at that point target host and credential handling get their own
-  review.
+  must not transmit them anywhere. **Hard requirement: zero network connections in every
+  command except `collect`.** `collect` is the one command that opens a socket, and only to
+  the devices its inventory names.
+
+  The exemption is bounded, not taken on trust. `tests/test_no_network.py` monkeypatches
+  `socket.socket` to fail and runs every other command end to end, deriving that list from
+  `cli._COMMAND_HANDLERS` itself so a command added later fails the suite rather than
+  quietly inheriting the guarantee. A second test starts a fresh interpreter and asserts
+  that `import nettopo.cli` pulls in neither `netmiko` nor `paramiko`. And the SSH backend
+  is an optional extra, so a core install has no networking library present at all — which
+  the `core-install` CI job verifies by installing it and running `nettopo all`.
+
+- **Read-only collection** — `collect` may never change a device. Every command is matched
+  against `^show\s+\S` immediately before it is written to the session, so an edit to the
+  command tables that introduced a `clear counters` fails loudly rather than silently
+  resetting a production counter. The tables are literals; nothing from the inventory or
+  from device output is ever concatenated into a command, so there is no injection path
+  into them. One caveat is stated rather than hidden: netmiko sends `terminal length 0` /
+  `terminal width 511` at session setup and `exit` at teardown. Those are session-local,
+  change no configuration and no counters, and are unavoidable for CLI scraping; no netmiko
+  write API is ever called.
+
+- **A07 Identification & authentication failures** — no credential is accepted on the
+  command line. There is no `--password` and no `--enable-password`, because argv is
+  readable by every user on the host through `ps`. Credentials are prompted for with
+  `getpass`, live in memory for the run only, and are declared `repr=False` so that logging
+  an object holding them cannot spill them. netmiko's `session_log` is never enabled — it
+  would write the authentication exchange to a plaintext file. `collect` refuses to run
+  without a TTY rather than let `getpass` fall back to an echoing prompt. Zeroization is
+  **not** claimed: a Python `str` cannot be reliably wiped, and saying otherwise would be
+  worse than saying so.
+
+- **Account lockout** — treated as a security property, not a usability detail. One wrong
+  password across a fleet is a lockout, and on a TACACS-backed network it locks the
+  operator out of everything. Collection is therefore **serial and stops at the first
+  error**, which bounds a mistyped credential to exactly one failed authentication attempt
+  — a guarantee no concurrent design can make, and the reason concurrency is out of scope
+  (§2). A rejected enable secret counts the same. nettopo never retries an authentication
+  and never re-prompts mid-run, because a retry loop is how accounts get locked. Devices the
+  stop prevented from being contacted are reported `skipped`, distinctly from the `failed`
+  device that ended the run.
+
+- **SSH host keys** — `collect` defaults to strict checking (`ssh_strict`,
+  `system_host_keys`), unlike netmiko's own default of silently adding an unknown key. A
+  tool whose purpose is typing device credentials into a socket must not accept an unknown
+  host key: a machine impersonating a device at first contact harvests a login and an enable
+  secret in one exchange. `--host-key-checking none` exists for labs, warns on every
+  invocation, and the README documents `ssh-keyscan` as the deliberate way to populate
+  `known_hosts`.
+
+- **A10 SSRF** — `collect` connects to hosts named in a user-supplied inventory. The user is
+  the operator and the inventory is their own file, so this is intended behavior rather than
+  a forged request. The mitigation that matters: **nothing but the inventory can name a
+  target.** No host, address or port is ever derived from parsed device output, so a hostile
+  CDP/LLDP neighbor entry in a capture can never become a connection. The resolved target
+  list is logged before the first connection, only port 22 or an explicit `--port` is
+  dialled, and no redirect, proxy or jump host is followed.
 
 If a change touches any of the above and the mitigation isn't obvious from the diff, call it
 out in the PR description.
@@ -682,7 +798,18 @@ out in the PR description.
   exist; do not assert pixel positions. Node *spacing* is the exception: how far apart the
   closest two nodes end up is a property the layout owes the labels, so it is asserted —
   but still never where any individual node is.
-- **No-network** — see §11.
+- **Collection** — netmiko is replaced by a scripted fake (`tests/conftest.py`), so the
+  collector's tests open no socket and run without the optional extra installed. The
+  highest-value case asserts that collected text survives `build_network_model()` — if the
+  synthesized prompt lines did not match the splitter, every capture would parse to nothing.
+  The failure policy is tested by how many devices were *contacted*, since a rule about not
+  doing something cannot be checked by looking at what was produced: a wrong password must
+  cost exactly one authentication attempt, and a missing enable password must not stop the
+  run.
+- **No-network** — see §11. The command list is derived from `cli._COMMAND_HANDLERS`, so a
+  new command cannot inherit the guarantee without a case; a separate test proves importing
+  the CLI pulls in no SSH library; and the `core-install` CI job proves the core package
+  installs without one.
 
 Coverage target: meaningful coverage on `parsing`, `model`, and `views`; `render` covered
 at the well-formed-XML level.
@@ -722,6 +849,10 @@ change.
 - **Phase 6 — BGP.** `bgp.py` parser (`bgp summary`), session graph, iBGP/eBGP styling,
   BGP CSV. `peer_device` stays `None`.
 - **Phase 7 — Polish.** Per-view layout tuning, docs, `nettopo all`.
+- **Phase 8 — Live collection.** `nettopo collect`: inventory, run-time credential
+  prompting, the read-only SSH collector, per-device capture files and the run report. The
+  `DataSource` interface Phase 0 defined is what makes this an addition rather than a
+  rewrite — no parser, model or view changes.
 
 Each phase after Phase 3 is an incremental PyPI release. Publish early; L2 done well is
 worth more than a half-finished grand plan.
