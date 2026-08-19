@@ -7,7 +7,6 @@ nothing opens a socket.
 from __future__ import annotations
 
 import pytest
-from tests.conftest import NXOS_VERSION, FakeConnection, FakeNetmiko, ios_version
 
 from nettopo.ingest.credentials import Credentials
 from nettopo.ingest.live import (
@@ -18,6 +17,7 @@ from nettopo.ingest.live import (
     _assert_read_only,
 )
 from nettopo.ingest.model_builder import build_network_model
+from tests.conftest import NXOS_VERSION, FakeConnection, FakeNetmiko, ios_version
 
 CREDENTIALS = Credentials(username="netops", password="secret", enable_password="enable")
 

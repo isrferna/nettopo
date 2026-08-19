@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 from netmiko.exceptions import NetmikoAuthenticationException, NetmikoTimeoutException
-from tests.conftest import FakeConnection, FakeNetmiko
 
 from nettopo.ingest.credentials import Credentials
 from nettopo.ingest.live import LiveDataSource, Outcome
+from tests.conftest import FakeConnection, FakeNetmiko
 
 CREDENTIALS = Credentials(username="netops", password="secret", enable_password="enable")
 NO_ENABLE_CREDENTIALS = Credentials(username="netops", password="secret", enable_password=None)

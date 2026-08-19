@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 from netmiko.exceptions import NetmikoTimeoutException
-from tests.conftest import FakeConnection, FakeNetmiko
 
 from nettopo.cli import build_parser, main
 from nettopo.ingest import credentials as credentials_module
 from nettopo.utils.paths import DEFAULT_CAPTURE_DIR, DEFAULT_REPORT_NAME
+from tests.conftest import FakeConnection, FakeNetmiko
 
 
 @pytest.fixture
