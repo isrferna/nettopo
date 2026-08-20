@@ -2,8 +2,9 @@
 
 CDP/LLDP capabilities alone cannot tell a router from a multilayer switch: a Catalyst
 9500 advertises `Router Switch`, exactly like an ISR does when it bridges. The platform
-string a device reports -- through its own `show version` or through a neighbor's CDP --
-names the chassis, and the chassis is what settles it.
+string a device reports -- through its own `show version`, a neighbor's CDP, or an LLDP
+System Description standing in for a platform -- names the chassis, and the chassis is
+what settles it.
 
 The mapping is a heuristic over product families, so two judgement calls are worth stating
 outright:
@@ -42,6 +43,11 @@ _ROLE_BY_PLATFORM: tuple[tuple[re.Pattern[str], DeviceRole], ...] = tuple(
         ),
         # Access switches: Catalyst 9300/9200 and the 2900 family.
         (r"\bWS-C9[23]\d\d|\bC9[23]\d\d|\bWS-C29\d\d|\bC29\d\d", DeviceRole.SWITCH),
+        # Arista: CCS-720/722 are campus access switches and must be tested before the
+        # generic rule; every DCS-7xxx is a data-center L3 switch, and "Arista"/"EOS"
+        # catches an LLDP System Description that names no model at all.
+        (r"\bCCS-7\d\d", DeviceRole.SWITCH),
+        (r"\bDCS-7\d{3}|\bArista\b|\bEOS\b", DeviceRole.L3_SWITCH),
         (r"\bCP-|IP\s*Phone", DeviceRole.PHONE),
         (r"\bVMware\b|\bESXi?\b|\bUCS\b", DeviceRole.SERVER),
     )

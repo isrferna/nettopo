@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `mxgraph.cisco19` stencils that only exist in recent draw.io releases. All roles now
   use the same `rect;prIcon=` card form as the network gear, which renders in every
   build.
+- **LLDP-only neighbors (e.g. Arista EOS switches) were classified as unknown devices.**
+  Three gaps closed: the parser now falls back to the LLDP System Description when
+  LLDP-MED reports no model, so "Arista Networks EOS ... DCS-7504N" reaches platform
+  classification; the capability table understands the IEEE 802.1AB letter codes
+  (`R`, `B`, `W`, `T`, `S`) alongside CDP's word forms; and Arista product families
+  (DCS/CCS, plus a generic Arista/EOS rule) are recognized. `--endpoints network-only`
+  accordingly no longer drops neighbors reported only over LLDP.
 
 ## [0.9.0] - 2026-08-20
 

@@ -330,7 +330,8 @@ neighbor leave from different local ports.
 **Why `Device.role` is inferred from neighbor capabilities, not self-reported.**
 `render/icons.py` maps `DeviceRole` to a Cisco icon, but a device's own CDP/LLDP output
 never reports its own capabilities — so role is inferred from how *other* devices'
-CDP/LLDP describe it (`Capabilities: Router` / `Switch` / `Phone` / `Host`). This
+CDP/LLDP describe it (CDP's `Capabilities: Router` / `Switch` / `Phone` / `Host`, or
+LLDP's letter codes `R` / `B` / `W` / `T` / `S`). This
 inference is applied to every raw link as it is registered (step J above), before the
 two directions of a source-to-source link are deduplicated into one `Link` (step L):
 deduplication keeps only one direction's `remote_capabilities`, so inferring role only
@@ -367,16 +368,21 @@ ESXi`), so inferring one would put noise in a column that today only ever holds 
 
 ### Why the platform string, not capabilities, decides a device's role
 
-`Device.role` starts from the `Router`/`Switch`/`Phone`/`Host` capabilities a neighbor
-advertises over CDP/LLDP, and that source has two limits it cannot get past. It cannot
+`Device.role` starts from the capabilities a neighbor advertises — CDP's
+`Router`/`Switch`/`Phone`/`Host` words or LLDP's IEEE 802.1AB letter codes (`R`, `B`,
+`W`, `T`, `S`), which `_ROLE_BY_CAPABILITY` holds in one table since the letters cannot
+collide with the words — and that source has two limits it cannot get past. It cannot
 separate a router from a multilayer switch, because a Catalyst 9500 advertises
-`Router Switch` and `_ROLE_BY_CAPABILITY` has to commit to one of the two — which is why
+`Router Switch` (an Arista chassis switch likewise `B, R`) and `_ROLE_BY_CAPABILITY` has
+to commit to one of the two — which is why
 the campus example used to draw both of its core switches as routers. And a device's own
 CDP/LLDP output never reports its own capabilities, so a *source* device has no role at all
 unless some neighbor happens to describe it.
 
 `model/platforms.py` closes both. It matches the reported chassis — `cisco C9500-16X`,
-`N9K-C93180YC-EX`, `cisco ISR4331/K9`, `VMware ESX` — against a table of product families,
+`N9K-C93180YC-EX`, `cisco ISR4331/K9`, `VMware ESX`, or an LLDP System Description like
+`Arista Networks EOS ... DCS-7504N` standing in for a platform (LLDP names a model in no
+other field) — against a table of product families,
 and `_apply_platform_roles()` runs it over every device once both platform sources have
 settled. A fact about the device beats a fact about who saw it, so it wins. Until this
 existed, `DeviceRole.L3_SWITCH`, `FIREWALL`, `AP` and `SERVER` had icons mapped in

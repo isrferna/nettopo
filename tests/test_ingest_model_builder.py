@@ -15,6 +15,10 @@ over CDP and `esxi-host03.example.com` over LLDP.
 `tests/fixtures/captures_portchannel/` is a third directory for port-channel data: two
 source switches joined by a two-member LACP bundle both sides call `Po1`, plus a host on
 an unbundled port.
+
+`tests/fixtures/captures_arista/` is a fourth directory for LLDP-only neighbors: one IOS
+source whose LLDP output names an Arista chassis switch (letter capabilities `B,R`, the
+model only in the System Description) and a generic bridge advertising just `B`.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from nettopo.model.entities import DeviceRole, InterfaceType, NetworkModel
 FIXTURES = Path(__file__).parent / "fixtures" / "captures"
 NXOS_FIXTURES = Path(__file__).parent / "fixtures" / "captures_nxos"
 PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "captures_portchannel"
+ARISTA_FIXTURES = Path(__file__).parent / "fixtures" / "captures_arista"
 STP_PORT_CHANNEL_FIXTURES = Path(__file__).parent / "fixtures" / "stp_portchannel"
 HSRP_FIXTURES = Path(__file__).parent / "fixtures" / "hsrp_topology"
 BGP_FIXTURES = Path(__file__).parent / "fixtures" / "bgp_topology"
@@ -91,6 +96,22 @@ def test_device_role_is_inferred_from_a_neighbors_reported_capabilities() -> Non
     # with "Capabilities: Router".
     model = _build_model()
     assert model.devices["core-rtr.example.com"].role is DeviceRole.ROUTER
+
+
+def test_an_lldp_only_neighbor_is_classified_from_its_system_description() -> None:
+    # arista-core1 is only ever seen over LLDP: its letter capabilities `B,R` first read
+    # as a router, and the System Description standing in for a platform then names the
+    # DCS-7504N chassis, which settles it as a multilayer switch.
+    model = build_network_model(FileDataSource(ARISTA_FIXTURES))
+    arista = model.devices["arista-core1"]
+    assert arista.role is DeviceRole.L3_SWITCH
+    assert arista.platform is not None and "DCS-7504N" in arista.platform
+
+
+def test_an_lldp_bridge_capability_alone_reads_as_a_switch() -> None:
+    # mgmt-bridge1 advertises only `B` and a description matching no platform family.
+    model = build_network_model(FileDataSource(ARISTA_FIXTURES))
+    assert model.devices["mgmt-bridge1"].role is DeviceRole.SWITCH
 
 
 def test_a_non_source_devices_platform_comes_from_a_neighbors_report() -> None:

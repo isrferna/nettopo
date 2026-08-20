@@ -53,6 +53,24 @@ def test_network_only_keeps_a_source_device_even_with_no_reported_capabilities()
     assert "sw1" in {node.id for node in diagram.nodes}
 
 
+def test_network_only_keeps_a_neighbor_reported_with_lldp_letter_capabilities() -> None:
+    # An LLDP-only neighbor advertises `B`/`R`, not CDP's "Switch"/"Router" words.
+    model = _model()
+    model.devices["ar1"] = Device(hostname="ar1", is_source=False, role=DeviceRole.L3_SWITCH)
+    model.links.append(
+        Link(
+            local_device="sw1",
+            local_interface="Te1/0/1",
+            remote_device="ar1",
+            remote_interface="Eth3/11/1",
+            discovery="lldp",
+            remote_capabilities=["B", "R"],
+        )
+    )
+    diagram = l2.build(model, endpoints="network-only")
+    assert "ar1" in {node.id for node in diagram.nodes}
+
+
 def test_interface_labels_are_attached_to_both_link_ends() -> None:
     diagram = l2.build(_model(), endpoints="all")
     sw1_to_sw2 = next(link for link in diagram.links if link.target == "sw2")
