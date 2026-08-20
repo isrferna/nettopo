@@ -46,7 +46,7 @@ returns 404). No rename needed for the v0.1.0 release.
 - Read-only ingestion of `show` command outputs from a local directory.
 - **Live collection over SSH** (`nettopo collect`): read-only, serial, credentials prompted
   for at run time and never stored, one capture file per device plus a CSV report of the
-  run. Ships as an optional `collect` extra so a core install carries no networking library.
+  run. Part of the standard install, so `collect` works out of the box.
 - TextFSM parsing via **`ntc-templates`** (no ad-hoc regex parsers for production paths).
 - A normalized in-memory **data model** (dataclasses).
 - Four views: L2, STP, HSRP, BGP.
@@ -108,7 +108,7 @@ nettopo/
 │       │   ├── __init__.py
 │       │   ├── base.py        # DataSource interface
 │       │   ├── files.py       # FileDataSource + CaptureWriter: the capture dir, both ways
-│       │   ├── inventory.py   # the device list `collect` works from (.txt / .yaml / .yml)
+│       │   ├── inventory.py   # the device list `collect` works from (one device per line)
 │       │   ├── credentials.py # prompts for one run's credentials; stores nothing
 │       │   ├── live.py        # LiveDataSource: SSH collection. The only netmiko importer
 │       │   └── model_builder.py  # ingestion -> parsers -> NetworkModel population
@@ -207,8 +207,8 @@ rest of the pipeline is unchanged.
 - **Command set:** NX-OS differs in exactly two places — `show port-channel summary`
   replaces the etherchannel form, and `show standby brief` is dropped because NX-OS spells
   it `show hsrp brief`, for which there is no template and no parser.
-- **Inventory:** a flat list of hostnames or IPs, as one device per line or a YAML list.
-  No groups, no variables, no credentials — see §2.
+- **Inventory:** a flat list of hostnames or IPs, one device per line in a plain text
+  file, with `#` comments. No YAML, no groups, no variables, no credentials — see §2.
 - **Failure policy and credentials:** see §11.
 
 **Command set consumed (v1):**
@@ -682,13 +682,13 @@ nettopo collect -I ./devices.txt                   # devices -> capture files + 
 
 ## 10. Dependencies
 
-**Runtime:** `n2g`, `textfsm`, `ntc-templates`, `python-igraph`.
+**Runtime:** `n2g`, `textfsm`, `ntc-templates`, `python-igraph`, `netmiko`.
 
-**Optional `collect` extra:** `netmiko`, `PyYAML`. Kept out of the core install on purpose:
-with no extra installed there is no networking library in the environment at all, which is
-what makes the guarantee in §11 true by construction rather than by discipline. `cli.py`
-imports them lazily inside the `collect` handler, so `import nettopo.cli` neither reaches
-them nor requires them, and a CI job installs the core alone to prove it.
+netmiko is a standard dependency so `nettopo collect` works out of the box, but `cli.py`
+still imports the SSH backend lazily, inside the `collect` handler: `import nettopo.cli`
+— and therefore every other command — must never reach it, which `tests/test_no_network.py`
+asserts in a fresh interpreter. The zero-network guarantee in §11 is enforced by that test
+suite, not by the shape of the install.
 
 > **Do NOT depend on or install Flask/Werkzeug.** N2G's optional V3D viewer imports Flask
 > at module load; with Flask present but an incompatible Werkzeug on Python 3.12, that
@@ -697,7 +697,7 @@ them nor requires them, and a CI job installs the core alone to prove it.
 > need arises, isolate it in a separate optional extra and a separate Python 3.11 venv.
 
 **Dev:** `pytest`, `pytest-cov`, `ruff` (lint + format), `mypy` (type checking),
-`build`/`twine` (packaging), `types-PyYAML`. Pin versions in `pyproject.toml`.
+`build`/`twine` (packaging). Pin versions in `pyproject.toml`.
 
 Target Python: **3.11+** (dataclasses with `X | None`, modern typing).
 
@@ -711,8 +711,8 @@ local files and, in `collect` alone, connects to network devices, the relevant i
 - **A03 Injection** — parsing is done by the TextFSM engine over template **data**;
   never `eval`/`exec`/`os.system` on parsed content or filenames. CLI parsing via the
   standard argument parser.
-- **A08 Software & Data Integrity** — no `pickle`, no `yaml.load`: the YAML inventory is
-  read with `safe_load` only, so an inventory cannot construct arbitrary Python objects.
+- **A08 Software & Data Integrity** — no `pickle`, no YAML loading of any kind: the
+  inventory is plain text read line by line, so it cannot construct Python objects.
   TextFSM templates come from the installed `ntc-templates` package, not from
   user-supplied executable code.
 - **Path handling (traversal)** — validate and normalize `--input`/`--output`. Output
@@ -728,9 +728,8 @@ local files and, in `collect` alone, connects to network devices, the relevant i
   `socket.socket` to fail and runs every other command end to end, deriving that list from
   `cli._COMMAND_HANDLERS` itself so a command added later fails the suite rather than
   quietly inheriting the guarantee. A second test starts a fresh interpreter and asserts
-  that `import nettopo.cli` pulls in neither `netmiko` nor `paramiko`. And the SSH backend
-  is an optional extra, so a core install has no networking library present at all — which
-  the `core-install` CI job verifies by installing it and running `nettopo all`.
+  that `import nettopo.cli` pulls in neither `netmiko` nor `paramiko`, so the SSH backend
+  stays reachable only through `collect`'s own handler.
 
 - **Read-only collection** — `collect` may never change a device. Every command is matched
   against `^show\s+\S` immediately before it is written to the session, so an edit to the
@@ -799,7 +798,7 @@ out in the PR description.
   closest two nodes end up is a property the layout owes the labels, so it is asserted —
   but still never where any individual node is.
 - **Collection** — netmiko is replaced by a scripted fake (`tests/conftest.py`), so the
-  collector's tests open no socket and run without the optional extra installed. The
+  collector's tests open no socket. The
   highest-value case asserts that collected text survives `build_network_model()` — if the
   synthesized prompt lines did not match the splitter, every capture would parse to nothing.
   The failure policy is tested by how many devices were *contacted*, since a rule about not
