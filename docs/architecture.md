@@ -889,6 +889,16 @@ actual names in jgraph/drawio's `Sidebar-Cisco19.js` and then rendered through t
 CLI rather than guessed: a wrong stencil path renders as a blank shape rather than falling
 back to a box, so accuracy there matters more than it would elsewhere.
 
+Every role is drawn through the `mxgraph.cisco19.rect` card shape with a `prIcon` glyph
+name, never as a standalone stencil. The endpoint roles once used standalone stencils
+(`workstation2`, `server2`, `ip_phone2`, `wireless_access_point2`), which turned out to
+exist only in recent draw.io builds — older desktop apps, pinned CLIs and embedded
+viewers ship an older `cisco19.xml` and render them as empty boxes. The unsuffixed
+stencil names exist in every build but are single-fill silhouettes that are only legible
+through the rect card, which paints the glyph in `strokeColor`. The card form is
+therefore the one spelling that renders correctly everywhere, and a test
+(`test_every_icon_uses_the_rect_card_form`) keeps standalone stencils from sneaking back.
+
 **This is deliberately draw.io-specific.** The classic `mxgraph.cisco.*` stencils these
 replaced were named stencils another tool could look up; a cisco19 icon is drawn by a
 draw.io JavaScript shape (`mxgraph.cisco19.rect` plus a `prIcon` name), which nothing

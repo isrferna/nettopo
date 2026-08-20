@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Endpoint icons rendered as empty boxes in older draw.io builds.** Access point,
+  IP phone, server and host nodes (and their legend samples) used standalone
+  `mxgraph.cisco19` stencils that only exist in recent draw.io releases. All roles now
+  use the same `rect;prIcon=` card form as the network gear, which renders in every
+  build.
+
 ## [0.9.0] - 2026-08-20
 
 ### Changed
