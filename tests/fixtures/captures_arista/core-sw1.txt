@@ -1,0 +1,58 @@
+core-sw1#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2023 by Cisco Systems, Inc.
+
+core-sw1 uptime is 5 weeks, 1 day, 2 hours, 10 minutes
+System returned to ROM by Reload Command
+
+cisco C9500-16X (X86) processor with 1863083K/6147K bytes of memory.
+Processor board ID FCW2245A0EF
+Base Ethernet MAC Address          : 74:83:ef:ff:d7:aa
+
+Configuration register is 0x102
+
+core-sw1#show lldp neighbors detail
+------------------------------------------------
+Local Intf: Te2/0/38
+Chassis id: fcbd.6774.de7e
+Port id: Ethernet3/11/1
+Port Description: WAN
+System Name: arista-core1
+
+System Description:
+Arista Networks EOS version 4.35.4M running on an Arista Networks DCS-7504N
+
+Time remaining: 115 seconds
+System Capabilities: B,R
+Enabled Capabilities: B,R
+Management Addresses:
+    IP: 10.248.10.10
+Auto Negotiation - not supported
+Physical media capabilities - not advertised
+Media Attachment Unit type - not advertised
+Vlan ID: - not advertised
+
+------------------------------------------------
+Local Intf: Te2/0/40
+Chassis id: 0011.2233.4455
+Port id: 0011.2233.4460
+Port Description: eth0
+System Name: mgmt-bridge1
+
+System Description:
+Generic managed bridge
+
+Time remaining: 118 seconds
+System Capabilities: B
+Enabled Capabilities: B
+Management Addresses:
+    IP: 10.248.10.20
+Auto Negotiation - supported, enabled
+Physical media capabilities:
+    1000baseT(FD)
+Media Attachment Unit type: 30
+Vlan ID: - not advertised
+
+Total entries displayed: 2

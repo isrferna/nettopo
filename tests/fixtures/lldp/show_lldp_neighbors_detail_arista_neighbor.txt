@@ -1,0 +1,20 @@
+Local Intf: Te2/0/38
+Chassis id: fcbd.6774.de7e
+Port id: Ethernet3/11/1
+Port Description: WAN
+System Name: arista-core1
+
+System Description:
+Arista Networks EOS version 4.35.4M running on an Arista Networks DCS-7504N
+
+Time remaining: 115 seconds
+System Capabilities: B,R
+Enabled Capabilities: B,R
+Management Addresses:
+    IP: 10.248.10.10
+Auto Negotiation - not supported
+Physical media capabilities - not advertised
+Media Attachment Unit type - not advertised
+Vlan ID: - not advertised
+
+Total entries displayed: 1

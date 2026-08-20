@@ -45,13 +45,24 @@ from nettopo.parsing.version import parse_version
 from nettopo.parsing.vlan import parse_vlans
 from nettopo.utils.hostnames import resolve_device_identities, split_serial_suffix
 
-# Checked in priority order: a device reported with both "Router" and "Switch"
-# capabilities (e.g. a multilayer switch) is classified as a router first.
+# One vocabulary for both protocols: CDP reports word capabilities, LLDP the IEEE
+# 802.1AB letter codes -- single letters cannot collide with the words, so the two share
+# a table. Checked in priority order: routers first, so a device advertising both bridge
+# and router (`B, R`, or CDP's "Router Switch") reads as a router, which the platform
+# pass then refines to a multilayer switch when the chassis says so. Phone/`T` and the
+# AP code `W` outrank bridge/`B` because phones advertise `B, T` and APs `B, W` -- the
+# more specific capability must win. `O`, `P` and `C` are deliberately unmapped: a
+# repeater or a DOCSIS device is exactly what UNKNOWN is for.
 _ROLE_BY_CAPABILITY: tuple[tuple[str, DeviceRole], ...] = (
     ("Router", DeviceRole.ROUTER),
-    ("Switch", DeviceRole.SWITCH),
+    ("R", DeviceRole.ROUTER),
+    ("W", DeviceRole.AP),
     ("Phone", DeviceRole.PHONE),
+    ("T", DeviceRole.PHONE),
+    ("Switch", DeviceRole.SWITCH),
+    ("B", DeviceRole.SWITCH),
     ("Host", DeviceRole.HOST),
+    ("S", DeviceRole.HOST),
 )
 
 # CDP names a neighbor's port more reliably than LLDP does, so it wins when both report

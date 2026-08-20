@@ -54,6 +54,23 @@ def test_classifies_the_families_no_fixture_covers_yet(platform: str, expected: 
     assert classify_platform(platform) is expected
 
 
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        # The full string an LLDP System Description carries when no CDP is available.
+        (
+            "Arista Networks EOS version 4.35.4M running on an Arista Networks DCS-7504N",
+            DeviceRole.L3_SWITCH,
+        ),
+        ("DCS-7050SX3-48YC8", DeviceRole.L3_SWITCH),
+        ("CCS-720XP-48Y6", DeviceRole.SWITCH),
+        ("Arista vEOS", DeviceRole.L3_SWITCH),
+    ],
+)
+def test_classifies_arista_platforms_and_descriptions(platform: str, expected: DeviceRole) -> None:
+    assert classify_platform(platform) is expected
+
+
 def test_a_wireless_controller_is_not_mistaken_for_a_catalyst_switch() -> None:
     """`C9800` would match the Catalyst 9000 pattern if order were not load-bearing."""
     assert classify_platform("cisco C9800-40-K9") is DeviceRole.AP

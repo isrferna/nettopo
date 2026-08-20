@@ -103,10 +103,10 @@ class Link:
     remote_device: str
     remote_interface: str
     discovery: str = "cdp"  # "cdp" | "lldp"
-    remote_platform: str | None = None
+    remote_platform: str | None = None  # CDP platform, or the LLDP System Description
     remote_mgmt_ip: str | None = None
     remote_chassis_id: str | None = None  # LLDP only; CDP never advertises a chassis MAC
-    remote_capabilities: list[str] = field(default_factory=list)  # ["Router","Switch"] vs [...]
+    remote_capabilities: list[str] = field(default_factory=list)  # CDP ["Router"] / LLDP ["B","R"]
 
     def key(self) -> frozenset[tuple[str, str]]:
         """Direction-independent identity, used to de-duplicate A->B and B->A."""

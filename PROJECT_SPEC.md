@@ -375,9 +375,9 @@ class Link:
     remote_device: str
     remote_interface: str
     discovery: str = "cdp"                  # "cdp" | "lldp"
-    remote_platform: str | None = None
+    remote_platform: str | None = None     # CDP "Platform:", or the LLDP System Description
     remote_mgmt_ip: str | None = None      # CDP "Management address(es)" / LLDP management TLV
-    remote_capabilities: list[str] = field(default_factory=list)  # ["Router","Switch"] vs ["Host","Phone"]
+    remote_capabilities: list[str] = field(default_factory=list)  # CDP ["Router","Switch"] / LLDP ["B","R"]
 
     def key(self) -> frozenset:
         """Direction-independent identity, used to de-duplicate A->B and B->A."""
@@ -509,8 +509,9 @@ render-ready nodes/links. Views never parse text and never write files.
 - **`l2`** — nodes = devices, links = `Link`s. Options: `--endpoints {all,network-only}`,
   `--link-mode {physical,port-channel}`.
   `network-only` keeps a device if `is_source` is true **or** its capabilities include
-  `Router`/`Switch` (this protects source devices, which never advertise their own
-  capabilities in their own CDP). Interface labels on both link ends. `--link-mode`
+  `Router`/`Switch` (CDP) or `R`/`B` (LLDP letter codes) — keeping source devices, which
+  never advertise their own capabilities in their own CDP/LLDP output. Interface labels
+  on both link ends. `--link-mode`
   selects one link per physical adjacency (default) or one link per port-channel — MLAG
   shown by port-channel grouping, imitating N2G — with the bundle's member interfaces
   carried in the link's tooltip.

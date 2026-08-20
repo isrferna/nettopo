@@ -42,7 +42,16 @@ def parse_lldp(local_device: str, raw_text: str, *, platform: str = "cisco_ios")
                 remote_device=neighbor_name,
                 remote_interface=normalize(neighbor_interface),
                 discovery="lldp",
-                remote_platform=record.get("platform") or None,
+                # LLDP has no chassis-model TLV outside LLDP-MED, so `platform` is only
+                # populated for MED endpoints (phones). For everything else the System
+                # Description -- "Arista Networks EOS ... DCS-7504N" -- is the vendor's
+                # own platform statement, so it fills the same field. CDP outranks LLDP
+                # in the builder's `_best_reported`, so a neighbor seen by both keeps
+                # its clean CDP platform string.
+                remote_platform=(
+                    record.get("platform") or record.get("neighbor_description", "").strip()
+                )
+                or None,
                 remote_mgmt_ip=record.get("mgmt_address") or None,
                 remote_chassis_id=record.get("chassis_id", "").strip() or None,
                 remote_capabilities=(record.get("capabilities") or "").replace(",", " ").split(),

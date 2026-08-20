@@ -9,6 +9,7 @@ from nettopo.parsing.lldp import parse_lldp
 FIXTURES = Path(__file__).parent / "fixtures" / "lldp"
 FIXTURE = FIXTURES / "show_lldp_neighbors_detail.txt"
 NXOS_NEIGHBOR_FIXTURE = FIXTURES / "show_lldp_neighbors_detail_nxos_neighbor.txt"
+ARISTA_NEIGHBOR_FIXTURE = FIXTURES / "show_lldp_neighbors_detail_arista_neighbor.txt"
 
 
 def _capture(fixture: Path = FIXTURE) -> str:
@@ -48,3 +49,25 @@ def test_parse_lldp_captures_the_neighbors_chassis_address() -> None:
     # the STP view matches it against the root bridge address to name an external root.
     (link,) = parse_lldp("sw1-access", _capture())
     assert link.remote_chassis_id == "001a.2b3c.4d02"
+
+
+def test_parse_lldp_falls_back_to_the_system_description_for_platform() -> None:
+    # LLDP only names a model through LLDP-MED, which network gear does not send; the
+    # System Description is the vendor's own platform statement and fills the same field.
+    (link,) = parse_lldp("core-sw1", _capture(ARISTA_NEIGHBOR_FIXTURE))
+    assert link.remote_device == "arista-core1"
+    assert (
+        link.remote_platform
+        == "Arista Networks EOS version 4.35.4M running on an Arista Networks DCS-7504N"
+    )
+    assert link.remote_capabilities == ["B", "R"]
+    assert link.remote_interface == "Eth3/11/1"
+
+
+def test_parse_lldp_reports_a_cisco_neighbors_description_as_its_platform() -> None:
+    # The IOS fixture has no LLDP-MED model either, so its description takes the slot.
+    (link,) = parse_lldp("sw1-access", _capture())
+    assert (
+        link.remote_platform
+        == "Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a"
+    )

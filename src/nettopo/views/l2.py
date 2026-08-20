@@ -40,7 +40,9 @@ from nettopo.views.diagram import (
     members_tooltip,
 )
 
-_NETWORK_CAPABILITIES = {"Router", "Switch"}
+# CDP word forms and the IEEE 802.1AB letter codes; `_ROLE_BY_CAPABILITY` in
+# `ingest/model_builder.py` is the shared vocabulary.
+_NETWORK_CAPABILITIES = {"Router", "Switch", "R", "B"}
 
 # Insertion order is the order the legend lists them: network gear from the core outward,
 # then the endpoints.
