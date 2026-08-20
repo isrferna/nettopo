@@ -24,6 +24,13 @@ def test_every_classified_role_gets_a_cisco_icon(role: DeviceRole) -> None:
     assert "shape=mxgraph.cisco19." in node_style(role).style
 
 
+@pytest.mark.parametrize("role", _ROLES_WITH_CISCO_ICONS)
+def test_every_icon_uses_the_rect_card_form(role: DeviceRole) -> None:
+    """Standalone stencils are absent from older draw.io builds and render as empty
+    boxes; the `rect;prIcon=` card form is the one spelling that renders everywhere."""
+    assert "shape=mxgraph.cisco19.rect;prIcon=" in node_style(role).style
+
+
 def test_unknown_role_falls_back_to_a_plain_box_not_a_cisco_icon() -> None:
     assert "shape=" not in node_style(DeviceRole.UNKNOWN).style
 

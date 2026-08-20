@@ -5,6 +5,13 @@ jgraph/drawio's `Sidebar-Cisco19.js` and then rendered through the draw.io CLI r
 guessed: a wrong stencil path renders as an invisible/blank shape instead of falling back
 to a box, so accuracy here matters more than it would for a typo elsewhere.
 
+Every role goes through the `rect;prIcon=<name>` card shape rather than a standalone
+stencil. The standalone endpoint stencils this module once used (`workstation2` and
+friends) only exist in recent draw.io builds and render as empty boxes everywhere else,
+while the old unsuffixed stencils are single-fill silhouettes that are only legible
+through `mxShapeCisco19Rect`, which paints the glyph in `strokeColor`. The card form is
+the one spelling that renders in every build.
+
 Two properties of this shape family drive the whole module:
 
 - **`strokeColor` is the glyph color**, not a border color -- it paints both the icon
@@ -49,10 +56,10 @@ _ICON_BY_ROLE: dict[DeviceRole, _Icon] = {
     DeviceRole.L3_SWITCH: _Icon("rect;prIcon=l3_switch", 50, 50, "#005073"),
     DeviceRole.SWITCH: _Icon("rect;prIcon=workgroup_switch", 50, 50, "#0F7B8A"),
     DeviceRole.FIREWALL: _Icon("rect;prIcon=firewall", 64, 50, "#C0392B"),
-    DeviceRole.AP: _Icon("wireless_access_point2", 50, 50, "#C77700"),
-    DeviceRole.PHONE: _Icon("ip_phone2", 58, 50, "#5A6673"),
-    DeviceRole.SERVER: _Icon("server2", 28, 50, "#3F6C51"),
-    DeviceRole.HOST: _Icon("workstation2", 50, 40, "#5A6673"),
+    DeviceRole.AP: _Icon("rect;prIcon=wireless_access_point", 50, 50, "#C77700"),
+    DeviceRole.PHONE: _Icon("rect;prIcon=ip_phone", 50, 50, "#5A6673"),
+    DeviceRole.SERVER: _Icon("rect;prIcon=server", 50, 50, "#3F6C51"),
+    DeviceRole.HOST: _Icon("rect;prIcon=workstation", 50, 50, "#5A6673"),
 }
 
 # DeviceRole.UNKNOWN (and any future role without a mapping) falls back to a plain box
