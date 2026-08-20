@@ -37,8 +37,8 @@ from nettopo.views.l2 import LinkMode
 
 if TYPE_CHECKING:
     # Annotations only. These modules reach netmiko, and `collect` is the one command
-    # that may need it -- importing them here at runtime would make every other command
-    # require an optional dependency it never uses.
+    # that may touch it -- importing them here at runtime would pull the SSH backend
+    # into every other command's process for nothing.
     from nettopo.ingest.files import CaptureWriter
     from nettopo.ingest.live import CollectionResult
 
@@ -204,10 +204,7 @@ def _add_collect_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         "-I",
         "--inventory",
         required=True,
-        help=(
-            "File listing the devices to collect from: one device per line (.txt), "
-            "or a YAML list (.yaml/.yml)."
-        ),
+        help="File listing the devices to collect from, one device per line.",
     )
     collect_parser.add_argument(
         "-o",
@@ -568,25 +565,15 @@ def _render_all_l2_diagrams(model: NetworkModel, output_root: Path) -> None:
 def _run_collect(args: argparse.Namespace) -> int:
     """Collect captures from live devices and write the run report.
 
-    netmiko and PyYAML ship only in the `collect` extra, so their importers are pulled in
-    here rather than at module scope: `import nettopo.cli` -- and therefore every other
-    command -- must neither reach them nor require them to be installed.
+    The SSH backend is imported here rather than at module scope: `import nettopo.cli` --
+    and therefore every other command -- must never reach netmiko, which
+    `tests/test_no_network.py` asserts in a fresh interpreter.
     """
-    try:
-        from nettopo.export.collect_report import write_collect_report
-        from nettopo.ingest.credentials import CredentialError, prompt_credentials
-        from nettopo.ingest.files import CaptureWriter
-        from nettopo.ingest.inventory import InventoryError, load_inventory
-        from nettopo.ingest.live import LiveDataSource
-    except ImportError as exc:
-        # The underlying message is kept so a genuine import bug in our own modules stays
-        # diagnosable rather than being misread as a missing extra.
-        logger.error(
-            "'collect' needs the optional SSH backend. Install it with: "
-            "pip install 'nettopo[collect]' (%s)",
-            exc,
-        )
-        return 1
+    from nettopo.export.collect_report import write_collect_report
+    from nettopo.ingest.credentials import CredentialError, prompt_credentials
+    from nettopo.ingest.files import CaptureWriter
+    from nettopo.ingest.inventory import InventoryError, load_inventory
+    from nettopo.ingest.live import LiveDataSource
 
     try:
         targets = load_inventory(args.inventory)

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import builtins
 import csv
-import sys
 from pathlib import Path
 
 import pytest
@@ -209,15 +208,3 @@ def test_a_bad_inventory_is_reported_without_a_traceback(
 ) -> None:
     assert _run(tmp_path, tmp_path / "nowhere.txt") == 1
     assert "cannot read inventory" in caplog.text
-
-
-def test_a_missing_extra_asks_for_the_install_rather_than_raising(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    """A core install must fail helpfully here, not with an ImportError traceback."""
-    monkeypatch.setitem(sys.modules, "netmiko", None)
-    for module in [name for name in sys.modules if name.startswith("nettopo.ingest.live")]:
-        monkeypatch.delitem(sys.modules, module)
-
-    assert _run(tmp_path, _inventory(tmp_path, "10.0.0.1")) == 1
-    assert "pip install 'nettopo[collect]'" in caplog.text

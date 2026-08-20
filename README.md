@@ -11,6 +11,10 @@ Four diagram views are produced from the same parsed data model:
 - **HSRP** — first-hop redundancy per SVI (virtual IP, priority, active/standby/listen).
 - **BGP** — BGP neighbor (session) graph (AS numbers, session state, iBGP vs eBGP).
 
+Hand-drawn network diagrams drift out of date the moment the network changes. With
+`nettopo` the diagrams are generated from what the devices actually report, so refreshing
+the documentation is a matter of re-running two commands.
+
 > `nettopo` is a working title — see [`PROJECT_SPEC.md`](PROJECT_SPEC.md) section 1.
 
 ## Status
@@ -33,16 +37,7 @@ collection over SSH). See [`CHANGELOG.md`](CHANGELOG.md) for the release history
 pip install nettopo
 ```
 
-That is everything except live collection. To also collect captures from devices over SSH:
-
-```bash
-pip install 'nettopo[collect]'
-```
-
-The extra pulls in netmiko and PyYAML. Keeping them optional is deliberate rather than
-tidy-mindedness: without the extra there is no networking library present in the
-environment at all, which is what makes the zero-network guarantee below true by
-construction rather than by discipline.
+That is everything, live collection over SSH included.
 
 Pre-releases exist too; `pip` skips them unless asked (`pip install --pre nettopo`).
 To install from source for development:
@@ -50,7 +45,7 @@ To install from source for development:
 ```bash
 git clone https://github.com/netcraftworks/nettopo.git
 cd nettopo
-pip install -e ".[dev,collect]"
+pip install -e ".[dev]"
 ```
 
 Requires Python 3.11+.
@@ -62,10 +57,32 @@ nettopo collect --inventory devices.txt   # devices -> ~/configs, over SSH
 nettopo all                               # ~/configs -> ./output
 ```
 
+The inventory is a plain text file naming one device per line — hostname, FQDN or IP —
+with `#` starting a comment. No credentials, no groups, no per-device variables:
+
+```
+# devices.txt — everything nettopo collect needs to know
+core-sw1
+core-sw2
+10.0.20.7        # bldg-a access stack, management address
+rtr-edge.example.net
+```
+
 `collect` asks for the credentials on the terminal, sends nothing but `show` commands,
 and writes one capture file per device into `~/configs` — the directory every other
-command reads by default, so `-i` can be dropped entirely. If you already have captures
-saved by hand, skip `collect` and point `-i` at them (see
+command reads by default, so `-i` can be dropped entirely. Every run also writes
+`nettopo-collect-report.csv` to the current directory, with one row per inventory entry
+so a device that was never reached is as visible as one that was collected:
+
+```
+target,hostname,status,platform,commands,capture_file,detail
+core-sw1,core-sw1,ok,cisco_ios,10,/home/you/configs/core-sw1.txt,
+core-sw2,core-sw2,ok,cisco_ios,10,/home/you/configs/core-sw2.txt,
+10.0.20.7,acc-sw2,ok,cisco_nxos,9,/home/you/configs/acc-sw2.txt,
+rtr-edge.example.net,,failed,,0,,NetmikoAuthenticationException: Authentication to device failed
+```
+
+If you already have captures saved by hand, skip `collect` and point `-i` at them (see
 [Preparing Captures](https://github.com/netcraftworks/nettopo/wiki/Preparing-Captures)
 for the file format). `all` then writes the complete output tree:
 
@@ -139,20 +156,29 @@ listening switches on neutral gray links](examples/hsrp-quad/diagrams/hsrp/hsrp_
 - [`CLAUDE.md`](CLAUDE.md) — engineering conventions (workflow, coding principles, security review).
 - [`CHANGELOG.md`](CHANGELOG.md) — release history.
 
-## Contributing
+## Getting help
 
-Work is tracked as GitHub issues, one per delivery-plan phase (see `PROJECT_SPEC.md`
-section 14). Each change lands via a pull request from a `feat/…`/`fix/…` branch into
-`main`; direct pushes to `main` are disabled. See [`CLAUDE.md`](CLAUDE.md) for the full
-workflow and coding conventions.
+- The [wiki](https://github.com/netcraftworks/nettopo/wiki) holds the detailed
+  documentation: the full reference for every command, the capture file format, and the
+  example gallery.
+- For bugs or unexpected output, open an
+  [issue](https://github.com/netcraftworks/nettopo/issues). Attaching the CSV tables from
+  `nettopo parse` usually pinpoints where an ingest went wrong.
+
+## Contributing and maintainers
+
+`nettopo` is maintained by [netcraftworks](https://github.com/netcraftworks).
+Contributions are welcome: work is tracked as GitHub issues, and each change lands via a
+pull request from a `feat/…`/`fix/…` branch into `main`; direct pushes to `main` are
+disabled. See [`CLAUDE.md`](CLAUDE.md) for the full workflow and coding conventions.
 
 ## Security
 
 Every command except `collect` makes **zero network connections** by design — they only
 read local capture files. That boundary is enforced rather than asserted:
 `tests/test_no_network.py` monkeypatches `socket.socket` to fail and runs every other
-command end to end, and a dedicated CI job proves the whole diagram pipeline runs with no
-networking library installed.
+command end to end, and asserts in a fresh interpreter that importing the CLI never
+imports the SSH backend, so it stays reachable only through `collect`'s own handler.
 
 `collect`, the one command that opens a socket, sends nothing but `show` commands
 (checked at the moment of sending), accepts no password on the command line, stores no

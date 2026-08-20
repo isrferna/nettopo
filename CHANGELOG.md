@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`nettopo collect` now works out of the box.** netmiko is a standard dependency and the
+  `collect` extra is gone: `pip install nettopo` is the whole install, and
+  `pip install 'nettopo[collect]'` is no longer a valid target. The zero-network guarantee
+  for every other command is unchanged and still enforced by `tests/test_no_network.py`,
+  which fails every socket and asserts that importing the CLI never imports the SSH
+  backend — what changed is only that the guarantee no longer rests on the networking
+  library being absent from the environment.
+
+### Removed
+
+- **YAML inventories.** An inventory is now only a plain text file with one device per
+  line; a `.yaml`/`.yml` inventory is refused with an error that says the support was
+  removed. This drops the PyYAML dependency entirely.
+
 ## [0.8.0] - 2026-08-19
 
 Phase 8: nettopo can now gather its own captures. `nettopo collect` connects to the devices
